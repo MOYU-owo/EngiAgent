@@ -1,0 +1,155 @@
+{
+  "task_type": "evaluate_existing",
+  "parameters": {
+    "support_type": {
+      "value": "simply_supported",
+      "unit": null,
+      "source": "user",
+      "confirmed": false
+    },
+    "load_case": {
+      "value": "full_span_udl",
+      "unit": null,
+      "source": "user",
+      "confirmed": false
+    },
+    "section_type": {
+      "value": "rectangular",
+      "unit": null,
+      "source": "user",
+      "confirmed": false
+    },
+    "reinforcement_layers": {
+      "value": 1,
+      "unit": null,
+      "source": "user",
+      "confirmed": false
+    },
+    "span_mm": {
+      "value": 25,
+      "unit": "ft",
+      "source": "user",
+      "confirmed": false
+    },
+    "fc_mpa": {
+      "value": 4.35,
+      "unit": "ksi",
+      "source": "user",
+      "confirmed": false
+    },
+    "fy_mpa": {
+      "value": 60,
+      "unit": "ksi",
+      "source": "user",
+      "confirmed": false
+    },
+    "beam_width_mm": {
+      "value": 12,
+      "unit": "in",
+      "source": "user",
+      "confirmed": false
+    },
+    "beam_depth_mm": {
+      "value": 20,
+      "unit": "in",
+      "source": "user",
+      "confirmed": false
+    },
+    "cover_mm": {
+      "value": 1.5,
+      "unit": "in",
+      "source": "user",
+      "confirmed": false
+    },
+    "bar_diameter_mm": {
+      "value": 1.128,
+      "unit": "in",
+      "source": "user",
+      "confirmed": false
+    },
+    "bar_area_mm2": {
+      "value": 1,
+      "unit": "in2",
+      "source": "user",
+      "confirmed": false
+    },
+    "stirrup_diameter_mm": {
+      "value": 0.375,
+      "unit": "in",
+      "source": "user",
+      "confirmed": false
+    },
+    "stirrup_area_mm2": {
+      "value": 0.11,
+      "unit": "in2",
+      "source": "user",
+      "confirmed": false
+    },
+    "aggregate_size_mm": {
+      "value": 0.75,
+      "unit": "in",
+      "source": "user",
+      "confirmed": false
+    },
+    "dead_load_kn_m": {
+      "value": 0.82,
+      "unit": "kip/ft",
+      "source": "user",
+      "confirmed": false
+    },
+    "live_load_kn_m": {
+      "value": 1,
+      "unit": "kip/ft",
+      "source": "user",
+      "confirmed": false
+    },
+    "self_weight_mode": {
+      "value": "excluded",
+      "unit": null,
+      "source": "user",
+      "confirmed": false
+    },
+    "concrete_unit_weight_kn_m3": {
+      "value": 150,
+      "unit": "lb/ft3",
+      "source": "user",
+      "confirmed": false
+    },
+    "stirrup_fy_mpa": {
+      "value": 60,
+      "unit": "ksi",
+      "source": "user",
+      "confirmed": false
+    },
+    "stirrup_legs": {
+      "value": 2,
+      "unit": null,
+      "source": "user",
+      "confirmed": false
+    },
+    "elastic_modulus_mpa": {
+      "value": 27568.7,
+      "unit": "MPa",
+      "source": "user",
+      "confirmed": false
+    },
+    "deflection_limit_ratio": {
+      "value": 240,
+      "unit": null,
+      "source": "user",
+      "confirmed": false
+    },
+    "bar_count": {
+      "value": 3,
+      "unit": null
+    },
+    "stirrup_spacing_mm": {
+      "value": 8.5,
+      "unit": "in"
+    }
+  },
+  "targets": [
+    "flexure"
+  ],
+  "user_query": "论文参考任务；保留英制原值，执行时归一化公制。容重与材料来自参考算例；Ec与L/240为显式教学输入，非中国规范值。"
+}

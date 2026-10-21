@@ -39,4 +39,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    import sys
+    if "--engineering" in sys.argv:
+        from engi_agent.engineering.cli import main as engineering_main
+        raise SystemExit(engineering_main())
     main()

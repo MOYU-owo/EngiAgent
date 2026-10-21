@@ -1,9 +1,9 @@
 # EngiAgent
 
 EngiAgent is an early MVP for a small, transparent engineering AI agent. The
-current version is deliberately domain-neutral: it demonstrates how a language
-model can decide when to call deterministic tools, observe their results, and
-continue a multi-turn conversation.
+original demo demonstrates deterministic tool calling and multi-turn conversation.
+The engineering mode now adds a Chinese CLI for teaching RC beam design and
+independent evaluation, with three DeepSeek roles and validated Python tools.
 
 ## Current capabilities
 
@@ -14,8 +14,74 @@ continue a multi-turn conversation.
 - Thread-level short-term memory
 - Observable tool traces in a CLI
 
-It does not yet implement real engineering analysis, engineering codes, RAG,
-databases, a web UI, or report generation.
+Engineering mode implements section sizing, loads, simple beam analysis,
+flexural/shear design and checks, elastic deflection, editable input confirmation,
+and Markdown/JSON reports. It does not implement full code compliance, cracked or
+long-term deflection, databases, OCR, automatic redesign or a web UI.
+
+## RC 梁教学引擎
+
+当前工作区：`E:/code/Engiagent`。保留原有 `python run.py` Demo。
+中国规范核验始终为“未完成”；分项试算通过不能代表完整工程合规。
+详见 [工具公式、来源和限制](docs/engineering_tools.md) 与
+[阶段验收和操作说明](docs/engineering_acceptance.md)。
+
+```powershell
+# 安装（已有环境可直接使用；测试需要 dev 依赖）
+D:/anaconda/envs/engiagent/python.exe -m pip install -e ".[dev]"
+
+# 离线示例：显示参数与假设，输入“确认”后计算
+D:/anaconda/envs/engiagent/python.exe run.py --engineering --request examples/engineering/paper_normal.json --offline
+
+# 可复现批量运行：--approve 显式确认文件参数与展示的教学假设
+D:/anaconda/envs/engiagent/python.exe run.py --engineering --request examples/engineering/paper_normal.json --offline --approve
+
+# 既有梁仅验抗弯（该例计入自重后应失败，退出码 2）
+D:/anaconda/envs/engiagent/python.exe run.py --engineering --request examples/engineering/flexure_only.json --offline --approve
+
+# 真实模型：不加 --offline；--query 使用真实 Dispatcher 提取中文任务
+D:/anaconda/envs/engiagent/python.exe run.py --engineering --query "请设计简支矩形梁，跨度6m……"
+
+# 离线测试；少量付费真实模型验证另外运行
+D:/anaconda/envs/engiagent/python.exe -m pytest -q
+D:/anaconda/envs/engiagent/python.exe examples/smoke_engineering.py
+```
+
+当前工作区已将 pytest 8.4.2 安装到 `.testdeps/`，可直接运行
+`D:/anaconda/envs/engiagent/python.exe scripts/run_tests.py`；当前 **74 项离线测试通过**，
+真实 DeepSeek 的设计三角色和独立验算入口均已验证。
+
+确认表使用中文名称、分类、原输入/提取值、公制计算采用值、来源和确认状态；
+缺失项与由设计工具确定的项目分开显示。可直接输入 `修改 梁高 600 mm`、
+`修改 跨度 6 m` 或 `修改 4 6 m`（按表中编号）更正；有量纲的数值必须写单位。
+旧的 `span_mm={"value":7.62,"unit":"m"}` 写法仍兼容。支持单位详见工具文档；未知字段、
+量纲错误、缺失关键参数均不能确认。输入 `quit` 取消。
+`--offline` 只接受结构化文件并使用固定测试角色，不伪装自然语言识别。
+结构化文件省略 Dispatcher 模型调用；Design/Evaluation 在非离线模式仍调用 DeepSeek。
+
+结果写入 `outputs/`（默认不加入版本控制），使用唯一文件名，不覆盖旧报告。
+JSON 包含原始值、公制值、来源、确认状态、公式版本、输入哈希与完整工具结果。
+计算时立即显示设计/验算各阶段的进度与关键结果，最终终端显示简洁方案和验算对比表。
+Markdown先给结论、方案、验算对比，再给中文参数、系数和逐步计算结果；技术追溯信息折叠在末尾。
+普通数值适度取整，原始输入保留必要精度，判定及JSON中的计算数据始终保留完整精度。
+进度以结构化 `ProgressEvent` 写入JSON，也可通过 `run_engineering(..., on_event=callback)` 订阅。
+退出码：所请求项目试算通过为 0；试算失败、不完整或执行错误为 2。
+
+纸面参考梁为 25ft、12×20in、4.35ksi、60ksi、0.82/1.00kip/ft。
+`paper_normal.json` 计入自重；`paper_ignore_self_weight.json` 明确忽略自重作对照；
+`unsized_design.json` 演示初选后不可行时停止；`unsized_feasible.json` 提供较小活载的可行初选。
+钢筋公称面积和直径单独保存。
+首轮箍筋全跨均布，不输出论文中的分区箍筋总数。
+
+快速体验新版可读输出（整数公制，无需付费模型调用）：
+
+```powershell
+D:/anaconda/envs/engiagent/python.exe run.py --engineering --request examples/engineering/metric_design.json --offline
+D:/anaconda/envs/engiagent/python.exe run.py --engineering --request examples/engineering/metric_existing.json --offline
+```
+
+这两个例子对应6m、300×550mm的梁；设计结果为3根直径20mm纵筋、双肢直径8mm箍筋@250mm。
+自然语言真实模型仍使用原来的 `--query` 入口，确认表、进度和报告共用同一展示层。
 
 ## Documentation
 
