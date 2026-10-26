@@ -1,0 +1,195 @@
+{
+  "code": "cn-2024",
+  "task_type": "new_design",
+  "auto_redesign": true,
+  "max_iterations": 3,
+  "targets": [
+    "flexure",
+    "shear",
+    "detailing",
+    "crack",
+    "deflection"
+  ],
+  "parameters": {
+    "support_type": {
+      "value": "simply_supported",
+      "unit": null,
+      "source": "user"
+    },
+    "load_case": {
+      "value": "full_span_udl",
+      "unit": null,
+      "source": "user"
+    },
+    "section_type": {
+      "value": "rectangular",
+      "unit": null,
+      "source": "user"
+    },
+    "reinforcement_layers": {
+      "value": 1,
+      "unit": null,
+      "source": "user"
+    },
+    "span_mm": {
+      "value": 6000,
+      "unit": "mm",
+      "source": "user"
+    },
+    "concrete_grade": {
+      "value": "C30",
+      "unit": null,
+      "source": "user"
+    },
+    "steel_grade": {
+      "value": "HRB400",
+      "unit": null,
+      "source": "user"
+    },
+    "stirrup_grade": {
+      "value": "HRB400",
+      "unit": null,
+      "source": "user"
+    },
+    "beam_width_mm": {
+      "value": 300,
+      "unit": "mm",
+      "source": "user"
+    },
+    "beam_depth_mm": {
+      "value": 550,
+      "unit": "mm",
+      "source": "user"
+    },
+    "cover_mm": {
+      "value": 30,
+      "unit": "mm",
+      "source": "user"
+    },
+    "bar_diameter_mm": {
+      "value": 20,
+      "unit": "mm",
+      "source": "user"
+    },
+    "stirrup_diameter_mm": {
+      "value": 8,
+      "unit": "mm",
+      "source": "user"
+    },
+    "stirrup_legs": {
+      "value": 2,
+      "unit": null,
+      "source": "user"
+    },
+    "aggregate_size_mm": {
+      "value": 20,
+      "unit": "mm",
+      "source": "user"
+    },
+    "dead_load_kn_m": {
+      "value": 10,
+      "unit": "kN/m",
+      "source": "user"
+    },
+    "live_load_kn_m": {
+      "value": 5,
+      "unit": "kN/m",
+      "source": "user"
+    },
+    "self_weight_mode": {
+      "value": "excluded",
+      "unit": null,
+      "source": "user"
+    },
+    "concrete_unit_weight_kn_m3": {
+      "value": 25,
+      "unit": "kN/m3",
+      "source": "user"
+    },
+    "live_quasi_factor": {
+      "value": 0.5,
+      "unit": null,
+      "source": "user"
+    },
+    "live_combination_factor": {
+      "value": 0.7,
+      "unit": null,
+      "source": "user"
+    },
+    "live_frequency_factor": {
+      "value": 0.6,
+      "unit": null,
+      "source": "user"
+    },
+    "importance_factor": {
+      "value": 1,
+      "unit": null,
+      "source": "user"
+    },
+    "design_life_years": {
+      "value": 50,
+      "unit": null,
+      "source": "user"
+    },
+    "safety_class": {
+      "value": 2,
+      "unit": null,
+      "source": "user"
+    },
+    "environment_class": {
+      "value": "I",
+      "unit": null,
+      "source": "user"
+    },
+    "crack_limit_mm": {
+      "value": 0.3,
+      "unit": "mm",
+      "source": "user"
+    },
+    "deflection_limit_ratio": {
+      "value": 600,
+      "unit": null,
+      "source": "user"
+    },
+    "end_anchor_length_mm": {
+      "value": 800,
+      "unit": "mm",
+      "source": "user"
+    },
+    "end_anchor_stirrup_spacing_mm": {
+      "value": 100,
+      "unit": "mm",
+      "source": "user"
+    },
+    "top_bar_diameter_mm": {
+      "value": 12,
+      "unit": "mm",
+      "source": "user"
+    },
+    "top_bar_count": {
+      "value": 2,
+      "unit": null,
+      "source": "user"
+    },
+    "side_bar_diameter_mm": {
+      "value": 12,
+      "unit": "mm",
+      "source": "user"
+    },
+    "side_bar_count_per_face": {
+      "value": 2,
+      "unit": null,
+      "source": "user"
+    },
+    "side_bar_spacing_mm": {
+      "value": 180,
+      "unit": "mm",
+      "source": "user"
+    },
+    "support_width_mm": {
+      "value": 1000,
+      "unit": "mm",
+      "source": "user"
+    }
+  }
+}

@@ -7,6 +7,9 @@ from .presentation import (PARAMETER_HEADERS, PHASES, TOOLS, parameter_rows,
 
 
 def markdown_report(state: EngineeringState, json_filename: str | None = None) -> str:
+    if state.request.code == 'cn-2024':
+        from .cn_presentation import markdown_report as cn_report
+        return cn_report(state, json_filename)
     lines = ["# EngiAgent RC 梁教学试算报告", "", "## 1. 结论与方案", "",
              result_overview(state, markdown=True), "",
              "本报告为教学试算；分项通过不代表中国规范或完整工程合规。",

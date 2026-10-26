@@ -2,8 +2,36 @@
 
 EngiAgent is an early MVP for a small, transparent engineering AI agent. The
 original demo demonstrates deterministic tool calling and multi-turn conversation.
-The engineering mode now adds a Chinese CLI for teaching RC beam design and
-independent evaluation, with three DeepSeek roles and validated Python tools.
+The engineering mode provides a Chinese CLI for teaching and Chinese-code RC
+beam design/evaluation, with three DeepSeek roles and validated Python tools.
+
+## 可视化工作台（2026-10-26）
+
+```powershell
+conda activate engiagent
+python -m pip install -e ".[ui]"
+python -m streamlit run streamlit_app.py --server.port 8511
+```
+
+打开 http://127.0.0.1:8511 。提供参数确认、真实计算、二维梁示意、LaTeX规范复核、Agent调用记录、工程DAG和修订比较；对照实验页明确为未执行。
+
+[网页使用说明](docs/ui_quickstart.md) · [界面设计与字段映射](docs/ui_design_spec.md) · [实际验收记录与截图](docs/ui_acceptance.md)
+
+## 中国规范版快速开始（2026-10-25）
+
+```powershell
+conda activate engiagent
+python run.py --engineering --offline --request examples/engineering/cn_design.json
+```
+
+检查参数表，输入“确认”开始。已接入中国规范材料、荷载组合、受弯、受剪、适用构造、裂缝与长期挠度；支持按需DAG、当前进程局部重算和有限改设。
+
+- [运行说明：真实自然语言、已有梁验算、修改和改设](docs/cn_quickstart.md)
+- [规范任务与工具映射](docs/rc_beam_cn_design_spec.md)
+- [独立算术基准](docs/cn_reference_case.md)
+- [实际交付与验证记录](docs/cn_delivery_validation.md)
+
+分项结论限定于支持范围；节点详图、现场构造及完整工程审查仍需工程师完成。
 
 ## Current capabilities
 
@@ -14,15 +42,16 @@ independent evaluation, with three DeepSeek roles and validated Python tools.
 - Thread-level short-term memory
 - Observable tool traces in a CLI
 
-Engineering mode implements section sizing, loads, simple beam analysis,
-flexural/shear design and checks, elastic deflection, editable input confirmation,
-and Markdown/JSON reports. It does not implement full code compliance, cracked or
-long-term deflection, databases, OCR, automatic redesign or a web UI.
+Engineering mode includes editable input confirmation and Markdown/JSON reports.
+The `cn-2024` mode additionally implements code-based cracked/long-term stiffness,
+selective recomputation and bounded redesign. Full engineering compliance,
+databases and OCR remain outside the supported scope. A local Streamlit workbench
+is available through the optional `ui` dependencies.
 
 ## RC 梁教学引擎
 
 当前工作区：`E:/code/Engiagent`。保留原有 `python run.py` Demo。
-中国规范核验始终为“未完成”；分项试算通过不能代表完整工程合规。
+本节介绍原教学模式，其中国规范核验为“未完成”；中国规范新模式见上方入口。
 详见 [工具公式、来源和限制](docs/engineering_tools.md) 与
 [阶段验收和操作说明](docs/engineering_acceptance.md)。
 
@@ -48,8 +77,8 @@ D:/anaconda/envs/engiagent/python.exe examples/smoke_engineering.py
 ```
 
 当前工作区已将 pytest 8.4.2 安装到 `.testdeps/`，可直接运行
-`D:/anaconda/envs/engiagent/python.exe scripts/run_tests.py`；当前 **74 项离线测试通过**，
-真实 DeepSeek 的设计三角色和独立验算入口均已验证。
+`D:/anaconda/envs/engiagent/python.exe scripts/run_tests.py`；原教学基线有74项回归测试，
+新增中国规范测试和真实DeepSeek结果见上方交付验证记录。
 
 确认表使用中文名称、分类、原输入/提取值、公制计算采用值、来源和确认状态；
 缺失项与由设计工具确定的项目分开显示。可直接输入 `修改 梁高 600 mm`、

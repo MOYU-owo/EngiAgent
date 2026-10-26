@@ -42,7 +42,13 @@ def stamp(state: EngineeringState) -> str:
 def prepare(request: TaskRequest, profile: TeachingProfile | None = None) -> EngineeringState:
     # A non-supported request is never forced through the beam schema.
     if request.task_type == "unsupported":
+        if request.code=='cn-2024':
+            from .cn_schema import CNProfile
+            return EngineeringState(request=request, profile=CNProfile(), errors=['不支持的结构或任务'])
         return EngineeringState(request=request, errors=["不支持的结构或任务"])
+    if request.code == 'cn-2024':
+        from .cn_workflow import prepare_cn
+        return prepare_cn(request, profile)
     request = normalize(request)
     if request.task_type == "new_design":
         request.targets = ["flexure", "shear", "elastic_deflection"]
@@ -51,6 +57,9 @@ def prepare(request: TaskRequest, profile: TeachingProfile | None = None) -> Eng
 
 
 def confirm(state: EngineeringState) -> EngineeringState:
+    if state.request.code == 'cn-2024':
+        from .cn_workflow import confirm_cn
+        return confirm_cn(state)
     state = prepare(state.request, state.profile)
     if state.errors or state.missing_parameters:
         raise ValueError("无法确认：" + ", ".join(state.errors + state.missing_parameters))
@@ -193,6 +202,9 @@ def build_engineering_graph(roles: RoleClient, on_event: ProgressCallback | None
 def run_engineering(state: EngineeringState, roles: RoleClient,
                     on_event: ProgressCallback | None = None) -> EngineeringState:
     state = state.model_copy(deep=True)
+    if state.request.code == 'cn-2024' and state.request.task_type != 'unsupported':
+        from .cn_workflow import run_cn
+        return run_cn(state, roles, on_event)
     if state.request.task_type == "unsupported":
         state.evaluation.status = "incomplete"
         return state

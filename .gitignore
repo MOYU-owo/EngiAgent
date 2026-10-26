@@ -12,3 +12,7 @@ dist/
 .vscode/
 outputs/
 .testdeps/
+.streamlit/secrets.toml
+docs/结构规范/*.pdf
+presentation/template_assets/
+presentation/template_preview/

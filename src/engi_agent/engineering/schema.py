@@ -13,17 +13,20 @@ class Contract(BaseModel):
 class ParameterValue(Contract):
     value: float | str | bool
     unit: str | None = None
-    source: Literal["user", "llm_extracted", "tool", "derived", "default_confirmed"] = "user"
+    source: Literal["user", "llm_extracted", "tool", "derived", "default_confirmed", "template"] = "user"
     confirmed: bool = False
     raw_value: float | str | bool | None = None
     raw_unit: str | None = None
     revision: int = 1
 
 
-Target = Literal["flexure", "shear", "elastic_deflection"]
+Target = Literal["flexure", "shear", "elastic_deflection", "detailing", "crack", "deflection"]
 
 
 class TaskRequest(Contract):
+    code: Literal['teaching', 'cn-2024'] = 'teaching'
+    auto_redesign: bool = False
+    max_iterations: int = Field(default=3, ge=1, le=10)
     task_type: Literal["new_design", "evaluate_existing", "unsupported"]
     parameters: dict[str, ParameterValue] = Field(default_factory=dict)
     targets: list[Target] = Field(default_factory=lambda: ["flexure", "shear", "elastic_deflection"])
@@ -105,6 +108,11 @@ FACTORS = {
 
 
 def normalize(request: TaskRequest) -> TaskRequest:
+    if request.code == 'cn-2024':
+        from .cn_workflow import normalize_cn
+        return normalize_cn(request)
+    if set(request.targets)-{'flexure','shear','elastic_deflection'}:
+        raise ValueError('教学模式不支持中国规范专项检查目标，请使用cn-2024')
     result = request.model_copy(deep=True)
     for name, item in result.parameters.items():
         if name not in UNITS:
@@ -136,10 +144,13 @@ def normalize(request: TaskRequest) -> TaskRequest:
 
 
 def parameter_python(name: str, item: ParameterValue):
-    return int(item.value) if name in {"bar_count", "stirrup_legs", "reinforcement_layers"} else item.value
+    return int(item.value) if name in {"bar_count", "stirrup_legs", "reinforcement_layers", "design_life_years", "safety_class", "top_bar_count", "side_bar_count_per_face"} else item.value
 
 
 def required_fields(request: TaskRequest) -> set[str]:
+    if request.code == 'cn-2024':
+        from .cn_schema import cn_required
+        return cn_required(request)
     required = {name for name, f in BeamParameters.model_fields.items() if f.is_required()}
     if request.task_type == "evaluate_existing":
         required |= {"beam_width_mm", "beam_depth_mm", "bar_count"}
@@ -176,8 +187,8 @@ class ToolResult(Contract):
 class EvaluationResult(Contract):
     status: Literal["pass", "fail", "incomplete", "error"] = "incomplete"
     checks: dict[str, bool] = Field(default_factory=dict)
-    code_status: Literal["未完成"] = "未完成"
-    overall_status: Literal["incomplete"] = "incomplete"
+    code_status: Literal["未完成", "已核验支持范围内项目"] = "未完成"
+    overall_status: Literal["incomplete", "pass", "fail", "error"] = "incomplete"
     unimplemented: list[str] = Field(default_factory=lambda: ["中国规范核验", "开裂与长期挠度", "裂缝", "锚固、搭接、耐久性和完整构造"])
 
 
@@ -194,9 +205,12 @@ class ProgressEvent(Contract):
     warnings: list[str] = Field(default_factory=list)
 
 
+from .cn_schema import CNProfile
+
+
 class EngineeringState(Contract):
     request: TaskRequest
-    profile: TeachingProfile = Field(default_factory=TeachingProfile)
+    profile: TeachingProfile | CNProfile = Field(default_factory=TeachingProfile)
     confirmed: bool = False
     confirmation_hash: str | None = None
     design_revision: int = 1
@@ -209,3 +223,7 @@ class EngineeringState(Contract):
     missing_parameters: list[str] = Field(default_factory=list)
     progress_events: list[ProgressEvent] = Field(default_factory=list)
     presentation_warnings: list[str] = Field(default_factory=list)
+    cache: dict[str, ToolResult] = Field(default_factory=dict)
+    plan_trace: list[dict[str, Any]] = Field(default_factory=list)
+    revisions: list[dict[str, Any]] = Field(default_factory=list)
+    revision_reason: str = '初始任务'
