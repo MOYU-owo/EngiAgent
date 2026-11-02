@@ -1,7 +1,7 @@
 {
   "code": "cn-2024",
   "task_type": "new_design",
-  "auto_redesign": false,
+  "auto_redesign": true,
   "max_iterations": 3,
   "targets": [
     "flexure",

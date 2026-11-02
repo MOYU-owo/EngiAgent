@@ -1,5 +1,7 @@
 # EngiAgent
 
+当前反馈修正版：参数规格校验、分步数值代入计算书、失败改设及多候选比较。见[操作与验证](docs/feedback_design_delivery.md)；本机新版地址 http://127.0.0.1:8517 。
+
 EngiAgent 是仅运行中国规范的钢筋混凝土梁设计、验算与咨询原型。2026-11-02 起移除了旧教学计算分支和通用 Agent Demo；所有入口默认 `cn-2024`，其他规范代码会被拒绝。
 
 ## 启动工作台
@@ -71,6 +73,6 @@ python examples/smoke_cn_engineering.py
 python examples/smoke_consultation.py
 ```
 
-[CN 单体系迁移与验证](docs/cn_only_migration.md) · [当前架构](docs/architecture.md) · [CLI 操作](docs/cn_quickstart.md) · [工作台操作](docs/ui_quickstart.md) · [公式与适用范围](docs/rc_beam_cn_design_spec.md) · [独立算术基准](docs/cn_reference_case.md) · [咨询与机制实验说明](docs/consultation_delivery.md)
+[CN 单体系迁移与验证](docs/cn_only_migration.md) · [当前架构](docs/architecture.md) · [CLI 操作](docs/cn_quickstart.md) · [前端详细使用手册](docs/EngiAgent_前端详细使用手册.md) · [公式与适用范围](docs/rc_beam_cn_design_spec.md) · [独立算术基准](docs/cn_reference_case.md) · [咨询与机制实验说明](docs/consultation_delivery.md)
 
 原文献、初始设计和早期评审文档保留为研究历史；涉及旧教学分支和 Demo 的描述不代表当前可运行功能。

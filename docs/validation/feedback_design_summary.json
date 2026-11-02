@@ -1,0 +1,90 @@
+{
+  "date": "2026-11-02",
+  "source_report_sha256": "a56720005991998be1e8ca72151d0f930bc89ad30daaa8451ea3b721fcbb8771",
+  "method": "按附件明列工程参数重建；不恢复原模型调用或原JSON",
+  "tests": "175 passed in 24.10s",
+  "requested_solutions": 2,
+  "authorized_diameters_mm": [
+    20,
+    22
+  ],
+  "max_iterations": 6,
+  "selected_revision": 3,
+  "cases": [
+    {
+      "revision": 1,
+      "candidate": {
+        "beam_width_mm": 300.0,
+        "beam_depth_mm": 550.0,
+        "bar_count": 3,
+        "bar_diameter_mm": 20.0,
+        "stirrup_diameter_mm": 8.0,
+        "stirrup_legs": 2,
+        "end_anchor_stirrup_spacing_mm": 100.0,
+        "As_mm2": 942.4777960769379,
+        "stirrup_spacing_mm": 350.0,
+        "status": "rejected"
+      },
+      "status": "fail",
+      "checks": {
+        "flexure": true,
+        "shear": true,
+        "detailing": true,
+        "crack": false,
+        "deflection": true
+      },
+      "crack_mm": 0.3648685131517939,
+      "deflection_mm": 21.1778524882908
+    },
+    {
+      "revision": 2,
+      "candidate": {
+        "beam_width_mm": 300.0,
+        "beam_depth_mm": 550.0,
+        "bar_count": 4,
+        "bar_diameter_mm": 20.0,
+        "stirrup_diameter_mm": 8.0,
+        "stirrup_legs": 2,
+        "end_anchor_stirrup_spacing_mm": 100.0,
+        "As_mm2": 1256.6370614359173,
+        "stirrup_spacing_mm": 350.0,
+        "status": "checked"
+      },
+      "status": "pass",
+      "checks": {
+        "flexure": true,
+        "shear": true,
+        "detailing": true,
+        "crack": true,
+        "deflection": true
+      },
+      "crack_mm": 0.23044336158909193,
+      "deflection_mm": 16.94421776312138
+    },
+    {
+      "revision": 3,
+      "candidate": {
+        "beam_width_mm": 300.0,
+        "beam_depth_mm": 550.0,
+        "bar_count": 3,
+        "bar_diameter_mm": 22,
+        "stirrup_diameter_mm": 8.0,
+        "stirrup_legs": 2,
+        "end_anchor_stirrup_spacing_mm": 100.0,
+        "As_mm2": 1140.398133253095,
+        "stirrup_spacing_mm": 350.0,
+        "status": "checked"
+      },
+      "status": "pass",
+      "checks": {
+        "flexure": true,
+        "shear": true,
+        "detailing": true,
+        "crack": true,
+        "deflection": true
+      },
+      "crack_mm": 0.28530075940340266,
+      "deflection_mm": 18.339939708801758
+    }
+  ]
+}

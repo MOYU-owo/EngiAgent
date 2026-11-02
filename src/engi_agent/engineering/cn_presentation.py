@@ -4,6 +4,7 @@ Formatting is display-only: full precision remains in state/JSON and checks are
 never recomputed from rounded display values.
 """
 from __future__ import annotations
+from .references import professional_references
 
 from pathlib import Path
 from uuid import uuid4
@@ -302,6 +303,12 @@ def markdown_report(state, json_filename=None):
     lines += ['范围：本次请求及已实现中国规范项目；完整工程审查仍需节点、施工图与适用边界复核。','',
              '## 参数与计算边界','',confirmation_text(state,markdown=True),'',
              '实际计算保留完整精度，以下显示值取整。端部及施工构造假定需落实，分项通过不能替代完整工程审查。','']
+    lines += ['搜索直径目录：'+str(state.request.search_diameters_mm or '固定输入直径')+'；期望通过候选数：'+str(state.request.solution_count),'',
+              '搜索停止原因：'+(state.search_stop_reason or '未开展设计搜索'),'']
+    if state.design_alternatives:
+        lines += ['## 已通过候选对照','',table(['修订','实配纵筋','纵筋面积/mm²','当前选用'],
+            [[str(r['revision']),str(r['candidate']['bar_count'])+'Φ'+number(r['candidate']['bar_diameter_mm']),number(r['candidate']['As_mm2'],4),'是' if r['revision']==state.design_revision else '否'] for r in state.design_alternatives],markdown=True),
+            '推荐只比较已通过候选的纵筋面积，不代表造价最优。全部候选与失败尝试保存在JSON修订记录。','']
     if json_filename: lines += [f'[完整JSON轨迹]({json_filename})','']
     if state.request.user_query: lines += ['原始需求：'+state.request.user_query,'']
     lines += ['## 分项计算过程','']
@@ -310,12 +317,17 @@ def markdown_report(state, json_filename=None):
         check = '通过' if result.outputs.get('pass') is True else '不通过' if result.outputs.get('pass') is False else '计算完成'
         if result.status!='success': check='执行失败' if result.status=='failed' else '上游阻断'
         lines += [f'### {"设计" if phase=="design" else "独立验算"} · {LABELS.get(name,name)} · {check}','']
+        from .calculation_trace import calculation_steps
+        steps=result.calculation_steps or calculation_steps(result)
+        lines += [table(['步骤','计算内容','公式','数值代入','结果','单位','判定'],
+            [[str(r['step']),r['title'],r['formula'],r['substitution'],number(r['result'],6) if isinstance(r['result'],(float,int)) else str(r['result']),r['unit'],('通过' if r['passed'] else '不通过') if r['passed'] is not None else '—'] for r in steps],markdown=True),'']
         rows=[]
         for k,v in result.outputs.items():
             if k in ('pass','reasons','assumptions','engineering_failure'): continue
             rows.append([OUTPUTS.get(k,k),number(v,4) if isinstance(v,(int,float)) else '未提供/不适用' if v is None else str(v)])
         lines += [table(['项目','结果'],rows,markdown=True),'']
-        lines += ['依据：'+'；'.join(ref for ref in result.code_refs if not ref.startswith('docs/')),'']
+        formal=professional_references(result.code_refs)
+        if formal:lines += ['规范依据：'+'；'.join(formal),'']
         lines += ['- '+str(x) for x in result.errors+result.outputs.get('reasons',[])+result.outputs.get('assumptions',[])]+['']
     actions={'execute':'执行','reuse':'复用','invalidate_execute':'失效后重算','blocked':'阻断'}
     lines += ['## 规划与复用记录','',table(['修订','阶段','工具','处理','原因'],

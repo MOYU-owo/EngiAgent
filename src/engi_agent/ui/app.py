@@ -2,55 +2,23 @@
 from __future__ import annotations
 import html
 import json
+from typing import get_args
 import streamlit as st
-import pandas as pd
 
-from engi_agent.engineering.cn_schema import TaskRequest, EngineeringState, parameter_python
+from engi_agent.engineering.cn_schema import TaskRequest, EngineeringState, parameter_python, CNParameters, REBAR_DIAMETERS
 from engi_agent.engineering.cn_workflow import ALL_TARGETS
 from engi_agent.engineering.dependency_graph import TARGET_TOOLS, SPECS
 from engi_agent.engineering.cn_presentation import OUTPUTS
-from engi_agent.engineering.cn_presentation import number
-from .service import WorkbenchSession, CASES, ROOT, load_case
+from engi_agent.engineering.cn_presentation import number, SOURCES, ENUMS
+from .service import WorkbenchSession, CASES, ROOT, load_case, ENUM_FIELDS
 from .projections import (STAGES, VERDICTS, ACTIONS, TOOL_STATUS, GROUPS, LABELS,
                           editor_rows, audit_rows, result_rows, dag_nodes, revision_comparison, output_rows,input_rows)
 from .diagrams import beam_svg, dag_dot, agent_dot
 from .formulas import FORMULAS, NOTES
+from .styles import CSS
 
 PAGES=['设计工作台','计算与规范复核','Agent 与动态规划','专家咨询','对照实验']
-CSS='''
-<style>
-.stApp {font-family: "Segoe UI", "Microsoft YaHei", sans-serif;}
-.block-container {max-width:1800px; padding:1.6rem 2.2rem 3rem;}
-[data-testid="stSidebar"] {min-width:210px;max-width:210px;border-right:1px solid #dce3ec;}
-[data-testid="stSidebar"] > div:first-child {padding-top:1.5rem;}
-[data-testid="stHeader"] {background:transparent;}
-h1 {font-size:1.65rem!important;font-weight:650!important;letter-spacing:-.025em;}
-h2 {font-size:1.22rem!important;font-weight:620!important;}
-h3 {font-size:1rem!important;font-weight:620!important;}
-[data-testid="stMetricLabel"] {font-size:.78rem;color:#607087;}
-[data-testid="stMetricValue"] {font-size:1.6rem;font-variant-numeric:tabular-nums;}
-[data-testid="stVerticalBlockBorderWrapper"] > div {border-color:#dce3ec!important;border-radius:7px!important;}
-[data-testid="stVerticalBlockBorderWrapper"] {background:#fff;border-radius:7px;}
-div[class*="st-key-card_"] {background:#fff;border-radius:7px;}
-[data-testid="stExpander"] {background:#fff;border-radius:7px;}
-[data-testid="stSidebarUserContent"] {padding-top:2rem;}
-[data-testid="stSidebar"] [role="radiogroup"] {gap:5px;}
-button, input, textarea {font-family:inherit!important;}
-button[kind="primary"] {font-weight:600;}
-.brand {font-size:23px;font-weight:700;color:#173e73;letter-spacing:-.035em;}
-.eyebrow {font-size:10px;letter-spacing:.14em;color:#74869b;font-weight:650;text-transform:uppercase;}
-.meta {color:#607087;font-size:12px;line-height:1.8;}
-.pill {display:inline-block;padding:4px 11px;border:1px solid #cad7e7;border-radius:4px;background:#eaf0f8;color:#173e73;font-size:12px;font-weight:600;}
-.pill.warn {background:#faf1df;border-color:#e5d2ab;color:#84611f;}
-.pill.fail {background:#faeae8;border-color:#e6c1bd;color:#9e4039;}
-.pill.pass {background:#eaf4ed;border-color:#c6ddcc;color:#346548;}
-.section-title {font-size:11px;letter-spacing:.1em;color:#607087;font-weight:650;margin:0 0 12px;}
-[data-testid="stDataFrame"] {font-variant-numeric:tabular-nums;}
-[data-testid="stCaptionContainer"] {color:#607087;}
-.step-strip {font-size:12px;color:#6d7e92;border-bottom:1px solid #dce3ec;padding:0 0 14px;margin-bottom:12px;}
-@media (max-width:1400px) {.block-container {padding-left:1.3rem;padding-right:1.3rem;}}
-</style>
-'''
+
 
 
 def current():
@@ -81,16 +49,23 @@ def notice(ctl):
 def header(ctl):
     left,right=st.columns([3,2],vertical_alignment='center')
     with left:
-        st.markdown('<div class="eyebrow">STRUCTURAL ENGINEERING · HUMAN IN THE LOOP</div>',unsafe_allow_html=True)
+        st.markdown('<div class="eyebrow">中国规范 RC 梁 · 工程工作台</div>',unsafe_allow_html=True)
         st.title(st.session_state.get('nav',PAGES[0]))
     with right:
         state=ctl.draft
         status=VERDICTS[ctl.result.evaluation.status] if ctl.stage=='completed' and ctl.result else STAGES[ctl.stage]
         css='pass' if ctl.stage=='completed' and ctl.result.evaluation.status=='pass' else 'fail' if ctl.stage=='error' or ctl.stage=='completed' and ctl.result.evaluation.status in ('fail','error') else 'warn' if ctl.stage in ('editing','validated') else ''
-        st.markdown(f'<div style="text-align:right"><span class="pill {css}">{html.escape(status)}</span><div class="meta">'
+        st.markdown(f'<div class="task-status"><span class="pill {css}">{html.escape(status)}</span><div class="meta">'
                     +html.escape(ctl.case_name)+' · '+(f'修订 {state.design_revision}' if state else '未加载')
-                    +'<br>'+html.escape(state.profile.version if state else 'CN · 待加载计算配置')+'</div></div>',unsafe_allow_html=True)
-    st.markdown('<div class="step-strip">01 需求与参数　→　02 工程师确认　→　03 设计与独立验算　→　04 复核与修订</div>',unsafe_allow_html=True)
+                    +'</div></div>',unsafe_allow_html=True)
+    active = {'empty':0, 'editing':0, 'parsing':0, 'validated':1,
+              'confirmed':2, 'running':2, 'completed':3}.get(ctl.stage, 0)
+    steps = ['需求与参数', '核对与确认', '设计与独立验算', '结果复核与修订']
+    items = ''.join(f'<li aria-current="{"step" if i == active else "false"}" class="{"done" if i < active else ""}">{i+1:02d}　{title}</li>'
+                    for i, title in enumerate(steps))
+    st.markdown('<ol class="workflow-steps" aria-label="工程任务进度">'+items+'</ol>', unsafe_allow_html=True)
+    if ctl.result and ctl.stage != 'completed':
+        st.warning(f'参数已修改，待重新验算。上次结果：修订 {ctl.result.design_revision}。')
 
 
 def sidebar(ctl):
@@ -99,14 +74,14 @@ def sidebar(ctl):
         st.write('')
         st.radio('工作区',PAGES,key='nav',label_visibility='collapsed')
         st.divider()
-        st.radio('执行模式',['离线 · 确定性角色','DeepSeek · 真实模型','DeepSeek · 仅需求与咨询'],key='execution_mode',on_change=ctl.mark_dirty)
-        st.caption('仅需求与咨询模式由DeepSeek解析语言，设计和验算直接按工程DAG执行，减少复述工具计划的模型调用。')
+        with st.expander('运行设置', expanded=False):
+            st.radio('执行模式',['离线 · 确定性角色','DeepSeek · 真实模型','DeepSeek · 仅需求与咨询'],key='execution_mode',on_change=ctl.mark_dirty)
+        st.caption('当前模式：'+st.session_state.execution_mode)
         st.divider()
-        st.caption('规范配置')
-        st.markdown('**中国规范 · 限定梁模型**')
-        st.caption('GB/T 50010（2024修订）\n\nGB 55001 / GB 55008\n\nGB 50009')
-        st.divider()
-        st.caption('科研与教学原型\n\n当前连接内存会话；不提供跨进程恢复。\n\n完整工程审查仍需工程师完成。')
+        with st.expander('规范与适用范围'):
+            st.caption('GB/T 50010（2024修订） · GB 55001 · GB 55008 · GB 50009')
+            st.caption('简支矩形梁、全跨均布恒活载、单层受拉筋。')
+
 
 
 def download_buttons(ctl, key='main'):
@@ -134,17 +109,17 @@ def load_panel(ctl):
                     st.rerun()
                 except ValueError as exc:st.error(str(exc))
         else:
-            use_template=st.checkbox('采用上述显式参数模板',value=True)
+            use_template=st.checkbox('采用上述显式参数模板',value=False)
+            st.caption('勾选后使用模板补充未说明的参数。')
             query=st.text_area('自然语言工程需求',placeholder='例如：按中国规范新设计一根梁，跨度6m，梁宽300mm，梁高550mm，其余采用指定模板。',height=108)
             live=st.session_state.execution_mode.startswith('DeepSeek')
-            if not live:st.caption('请先在侧栏切换到DeepSeek模式；离线模式不会发起自然语言模型调用。')
+            if not live:st.caption('自然语言解析需在侧栏选择 DeepSeek 模式。')
             if st.button('调用 Dispatcher 提取参数',disabled=not query.strip() or not live,width='stretch'):
                 try:
                     with st.spinner('正在提取结构化参数…'):
                         ctl.parse(query,load_case(chosen) if use_template else None)
                     st.rerun()
                 except ValueError as exc:st.error(str(exc))
-            st.caption('仅点击此按钮才调用解析；模板值和模型提取值在确认表分别标注。')
         if chosen=='梁高修改与局部重算':st.info('先运行已有梁基准，再将梁高550改为600mm，校验并重新确认。')
 
 
@@ -153,44 +128,84 @@ def parameters_panel(ctl):
     state=ctl.draft; g=ctl.editor_generation
     with st.container(border=True,key='card_parameters'):
         st.markdown('### 参数与确认')
-        mode=st.radio('任务类型',['新方案设计','已有梁验算'],index=0 if state.request.task_type=='new_design' else 1,
-                      horizontal=True,key=f'task_{g}',on_change=ctl.mark_dirty)
-        task_type='new_design' if mode=='新方案设计' else 'evaluate_existing'
-        targets=st.multiselect('验算目标',ALL_TARGETS,default=state.request.targets,format_func=lambda t:LABELS[t],
-                               disabled=task_type=='new_design',key=f'targets_{g}',on_change=ctl.mark_dirty)
-        col1,col2=st.columns([1.2,1])
-        auto=col1.toggle('有限自动改设',value=state.request.auto_redesign if task_type=='new_design' else False,
-                         disabled=task_type!='new_design',key=f'auto_{g}',on_change=ctl.mark_dirty)
-        limit=col2.number_input('最多轮次',min_value=1,max_value=10,value=state.request.max_iterations,
-                               disabled=not auto,key=f'rounds_{g}',on_change=ctl.mark_dirty)
+        with st.expander('任务与验算设置', expanded=False):
+            mode=st.radio('任务类型',['新方案设计','已有梁验算'],index=0 if state.request.task_type=='new_design' else 1,
+                          horizontal=True,key=f'task_{g}',on_change=ctl.mark_dirty)
+            task_type='new_design' if mode=='新方案设计' else 'evaluate_existing'
+            targets=st.multiselect('验算目标',ALL_TARGETS,default=state.request.targets,format_func=lambda t:LABELS[t],
+                                   disabled=task_type=='new_design',key=f'targets_{g}',on_change=ctl.mark_dirty)
+            col1,col2=st.columns([1.2,1])
+            auto=col1.toggle('有限自动改设',value=state.request.auto_redesign if task_type=='new_design' else False,
+                             disabled=task_type!='new_design',key=f'auto_{g}',on_change=ctl.mark_dirty)
+            limit=col2.number_input('最多轮次',min_value=1,max_value=10,value=state.request.max_iterations,
+                                   disabled=not auto,key=f'rounds_{g}',on_change=ctl.mark_dirty)
+        st.caption(('新方案设计' if task_type=='new_design' else '已有梁验算')+' · '+'、'.join(LABELS[t] for t in (ALL_TARGETS if task_type=='new_design' else targets)))
+        search_diameters=st.multiselect('允许搜索的纵筋直径 / mm',REBAR_DIAMETERS,default=state.request.search_diameters_mm,
+            disabled=task_type!='new_design' or not auto,key=f'search_diameters_{g}',on_change=ctl.mark_dirty,
+            help='留空时固定使用输入直径。')
+        solutions=st.number_input('期望通过候选数',min_value=1,max_value=3,value=state.request.solution_count,
+            disabled=task_type!='new_design' or not auto,key=f'solutions_{g}',on_change=ctl.mark_dirty,
+            help='在最多轮次内搜索，按已通过候选的纵筋面积推荐。')
+        if task_type=='new_design' and not auto:
+            st.caption('自动改设已关闭，仅尝试一个候选方案。')
+        with st.expander('参数来源与支持规格'):
+            inherited=[row for row in audit_rows(state) if row.get('来源')=='显式案例模板']
+            st.caption(f'{len(inherited)} 项参数来自案例模板。')
+            st.dataframe(inherited,hide_index=True,width='stretch') if inherited else None
+            st.write('程序支持公称直径 / mm：'+ '、'.join(map(str,REBAR_DIAMETERS)))
+            st.caption('HPB300 箍筋支持目录内 6–25 mm 规格。')
+        all_rows=[]
+        notice(ctl)
+        group_titles=[group + (f' · 缺{sum(k in state.missing_parameters for k in keys)}项' if any(k in state.missing_parameters for k in keys) else '') for group,keys in GROUPS.items()]
+        for tab,group in zip(st.tabs(group_titles),GROUPS):
+            with tab:
+                rows=editor_rows(state,group)
+                if task_type=='new_design':rows=[r for r in rows if r['字段'] not in ('bar_count','stirrup_spacing_mm','design_moment_kn_m','design_shear_kn')]
+                missing=[r['参数'] for r in rows if r['字段'] in state.missing_parameters]
+                if missing:st.warning('本组必填缺项：'+'、'.join(missing))
+                enum_rows=[row for row in rows if row['字段'] in ENUM_FIELDS]
+                if enum_rows:
+                    with st.expander(group+'选项 · 结构条件与材料等级',expanded=group=='材料' or any(row['字段'] in state.missing_parameters for row in enum_rows)):
+                        for row in enum_rows:
+                            key=row['字段']
+                            choices=[None,*get_args(CNParameters.model_fields[key].annotation)]
+                            current=state.request.parameters.get(key)
+                            value=current.value if current else None
+                            chosen=st.selectbox(row['参数'],choices,index=choices.index(value) if value in choices else 0,
+                                format_func=lambda value:'请选择' if value is None else ENUMS.get(value, '一类环境' if value=='I' else str(value)),
+                                key=f'enum_{key}_{g}',on_change=ctl.mark_dirty)
+                            all_rows.append({**row,'输入值':'' if chosen is None else str(chosen),'单位':''})
+                rows=[row for row in rows if row['字段'] not in ENUM_FIELDS]
+                for row in rows:
+                    item=state.request.parameters.get(row['字段'])
+                    row['来源']=SOURCES.get(item.source,item.source) if item else '待提供'
+                edited=st.data_editor(rows,hide_index=True,height=350,column_order=['参数','输入值','单位'],
+                    disabled=['字段','参数','来源'],key=f'editor_{group}_{g}',on_change=ctl.mark_dirty,
+                    column_config={'输入值':st.column_config.TextColumn('输入值',help='留空表示未提供；数值必须配单位。'),
+                                   '参数':st.column_config.TextColumn('参数'),
+                                   '单位':st.column_config.TextColumn('单位',width='small'),
+                                   '来源':st.column_config.TextColumn('来源',width='small')},width='stretch')
+                all_rows.extend(edited.to_dict('records') if hasattr(edited,'to_dict') else edited)
+        if ctl.stage == 'validated':
+            with st.expander('确认前核对 · 全部采用值、来源与假定', expanded=True):
+                st.dataframe(audit_rows(state), hide_index=True, width='stretch', height=260)
+                st.caption('设计假定：50年、二级、一类环境、理想铰支、充分受拉直锚。')
+        hints = {'editing':'下一步：填写并校验参数。', 'validated':'下一步：核对采用值后，点击确认参数。',
+                 'confirmed':'下一步：运行任务。', 'completed':'计算已完成。修改参数后可创建下一轮修订。'}
+        st.caption(hints.get(ctl.stage, '先校验参数，再确认并运行。'))
         actions=st.columns(3)
         validate_clicked=actions[0].button('校验参数',key='validate',width='stretch')
         confirm_clicked=actions[1].button('确认参数',disabled=ctl.stage!='validated',key='confirm',width='stretch')
         run_clicked=actions[2].button('运行任务',type='primary',disabled=ctl.stage!='confirmed',key='run',width='stretch')
-        all_rows=[]
-        for tab,group in zip(st.tabs(list(GROUPS)),GROUPS):
-            with tab:
-                rows=editor_rows(state,group)
-                if task_type=='new_design':rows=[r for r in rows if r['字段'] not in ('bar_count','stirrup_spacing_mm','design_moment_kn_m','design_shear_kn')]
-                edited=st.data_editor(rows,hide_index=True,height=310,column_order=['参数','输入值','单位'],
-                    disabled=['字段','参数'],key=f'editor_{group}_{g}',on_change=ctl.mark_dirty,
-                    column_config={'输入值':st.column_config.TextColumn('输入值',help='留空表示未提供；数值必须配单位。'),
-                                   '单位':st.column_config.TextColumn('单位',width='small')},width='stretch')
-                all_rows.extend(edited.to_dict('records') if hasattr(edited,'to_dict') else edited)
         if validate_clicked:
             try:
-                ctl.apply(all_rows,task_type,targets,auto,int(limit))
+                ctl.apply(all_rows,task_type,targets,auto,int(limit),search_diameters=search_diameters,solution_count=int(solutions))
                 st.rerun()
             except ValueError as exc:st.error(str(exc))
         if confirm_clicked:
             try:
                 ctl.confirm();st.rerun()
             except ValueError as exc:st.error(str(exc))
-        notice(ctl)
-        st.caption('参数、任务或改设设置变更后确认立即失效。新设计的根数与跨内箍筋间距由工程工具确定。')
-        if ctl.stage=='validated':st.info('校验完成。请核对全部参数、来源及适用假定后确认。')
-        if ctl.stage=='confirmed':st.success('当前参数已确认，可以运行。')
-        st.caption('50年、二级、一类环境；理想铰支。端部采用充分受拉直锚保守方案；节点详图仍需复核。')
         if run_clicked:
             mode='offline' if st.session_state.execution_mode.startswith('离线') else 'program' if '仅需求与咨询' in st.session_state.execution_mode else 'DeepSeek'
             with st.status('正在执行工程任务…',expanded=True) as status:
@@ -212,20 +227,36 @@ def parameters_panel(ctl):
 
 def summary(state):
     verdict=state.evaluation.status
-    if verdict=='pass':st.success('请求项目通过 · 完整工程审查仍未完成')
+    if verdict=='pass':st.success('请求项目通过')
     elif verdict=='fail':st.error('请求项目不通过 · 请查看分项原因与修订记录')
     elif verdict=='error':st.error('执行错误 · 未形成有效通过结论')
     else:st.warning('检查不完整 · 未形成通过结论')
-    rows=pd.DataFrame(result_rows(state))
-    if not rows.empty:
-        for key in ('实际/作用值','承载力/限值'):rows[key]=rows[key].astype(float)
-    st.dataframe(rows.style.format(precision=3,na_rep='—'),hide_index=True,width='stretch',
-                 column_config={'实际/作用值':st.column_config.NumberColumn(format='%.3f'),
-                                '承载力/限值':st.column_config.NumberColumn(format='%.3f')})
+    if state.search_stop_reason:st.caption('设计搜索：'+state.search_stop_reason)
+    if state.design_alternatives:
+        st.markdown('**已通过候选**')
+        st.dataframe([{'修订':r['revision'],'纵筋':str(r['candidate']['bar_count'])+'Φ'+str(r['candidate']['bar_diameter_mm']),
+            '截面/mm':str(r['candidate']['beam_width_mm'])+'×'+str(r['candidate']['beam_depth_mm']),
+            '纵筋面积/mm²':r['candidate']['As_mm2'],'当前选用':r['revision']==state.design_revision,'全部请求检查':all(r['checks'].values())}
+            for r in state.design_alternatives],hide_index=True,width='stretch')
+    rows=result_rows(state)
+    tiles=[]
+    for row in rows:
+        passed=row['分项结论']=='通过'
+        tone='pass' if passed else 'fail' if row['分项结论']=='不通过' else 'warn'
+        detail='多项构造条件' if row['单位']=='多项条件' else number(row['实际/作用值'],3)+' / '+number(row['承载力/限值'],3)+' '+row['单位']
+        tiles.append('<div class="result-tile"><strong>'+html.escape(row['检查项目'])+'</strong><span class="pill '+tone+'">'
+                     +html.escape(row['分项结论'])+'</span><p>'+html.escape(detail)+'</p></div>')
+    st.markdown('<div class="result-grid" aria-label="请求项目验算摘要">'+''.join(tiles)+'</div>',unsafe_allow_html=True)
+    with st.expander('查看结果明细 · 作用值、限值与工具状态'):
+        display=[]
+        for row in rows:
+            display.append({**row, '实际/作用值':number(row['实际/作用值'],3),
+                            '承载力/限值':number(row['承载力/限值'],3)})
+        st.dataframe(display,hide_index=True,width='stretch')
 
 
 def workbench(ctl):
-    left,right=st.columns([1,1.65],gap='large')
+    left,right=st.columns([1.05,1.25],gap='large')
     with left:
         load_panel(ctl)
         parameters_panel(ctl)
@@ -234,7 +265,7 @@ def workbench(ctl):
         if state is None:
             with st.container(border=True,key='card_start'):
                 st.markdown('### 建立当前工程任务')
-                st.info('从左侧加载案例，或提交自然语言需求。参数确认之前不会执行计算。')
+                st.info('从左侧加载案例，或提交自然语言需求。')
                 st.markdown('**1** 选择设计或验算任务\n\n**2** 检查参数、单位和来源\n\n**3** 确认并运行，查看独立验算与规划轨迹')
             return
         is_current=ctl.stage=='completed' and ctl.result is not None
@@ -242,20 +273,22 @@ def workbench(ctl):
         c=ctl.result.candidate if is_current else {}
         actual={**p,**c}
         with st.container(border=True,key='card_model'):
-            st.markdown('<div class="section-title">ENGINEERING MODEL / 工程示意</div>',unsafe_allow_html=True)
+            st.markdown('<div class="section-title">工程模型 · 当前已校验参数</div>',unsafe_allow_html=True)
             metrics=st.columns(3)
             metrics[0].metric('计算跨度',number(actual.get('span_mm'))+' mm' if actual.get('span_mm') else '未提供')
             metrics[1].metric('矩形截面',number(actual['beam_width_mm'])+' × '+number(actual['beam_depth_mm'])+' mm' if actual.get('beam_width_mm') and actual.get('beam_depth_mm') else '待确定')
             metrics[2].metric('下部纵筋',str(actual['bar_count'])+'Φ'+number(actual['bar_diameter_mm']) if actual.get('bar_count') and actual.get('bar_diameter_mm') else '待设计/提供')
-            svg=beam_svg(p,c)
-            st.image(svg,width='stretch')
-            st.caption('按当前已知数据生成；图形为工程示意，腰筋与节点位置不推测补画。')
-            if ctl.stage=='editing':st.caption('编辑尚未校验时，示意仍使用上次校验的参数；不会把未校验输入当作新方案。')
+            st.image(beam_svg(p,c),width='stretch',caption='简支梁立面与矩形截面示意')
+            if ctl.stage=='editing':st.caption('示意图使用上次校验的参数。')
         with st.container(border=True,key='card_results'):
             st.markdown('### 分项结果与执行状态')
             if is_current:
                 summary(ctl.result)
-                st.caption('工具成功返回与分项检查通过是不同状态。详细公式、依据、原始输入输出见“计算与规范复核”。')
+                if len(ctl.result.design_alternatives)>1:
+                    selected=st.selectbox('工程师选择已验证候选',[r['revision'] for r in ctl.result.design_alternatives],
+                        format_func=lambda r:'修订 '+str(r),key='verified_alternative')
+                    if st.button('选用此已验证方案',key='select_alternative'):
+                        ctl.select_design_alternative(selected);st.rerun()
                 download_buttons(ctl)
             else:
                 st.info('当前参数尚未执行。'+('上一次结果已保留为历史快照，可在复核页查看。' if ctl.result else '确认后运行，结果将显示在此处。'))
@@ -272,35 +305,52 @@ def require_result(ctl):
     if ctl.result is None:
         st.info('尚无工程结果。请先在设计工作台确认参数并运行。')
         return None
-    if ctl.stage!='completed':st.warning(f'当前草稿尚未重新运行；以下为上次执行的修订 {ctl.result.design_revision} 快照，不是当前草稿结论。')
+    if ctl.stage!='completed':st.warning(f'以下为修订 {ctl.result.design_revision} 的历史结果，当前修改待重新验算。')
     return ctl.result
 
 
 def tool_details(name, result):
-    a,b=st.columns(2)
-    a.markdown('**工具执行：** '+TOOL_STATUS[result.status])
+    from engi_agent.engineering.calculation_trace import calculation_steps
+    from engi_agent.engineering.references import professional_references
+    from .latex_steps import step_formula, numeric_latex
     checked=result.outputs.get('pass') if result.status=='success' else None
-    b.markdown('**分项结论：** '+('通过' if checked is True else '不通过' if checked is False else '未获得有效结论'))
-    for error in result.errors+result.outputs.get('reasons',[]):st.error(error)
-    if result.status=='success':
-        st.markdown('#### 计算值与采用条件')
-        st.dataframe(output_rows(result),hide_index=True,width='stretch',column_config={'数值':st.column_config.NumberColumn(format='%.5g')})
-    st.markdown('#### 实现公式 · LaTeX')
-    st.caption('只读转写现有工具公式。截面计算使用mm、N、MPa；内力输出kN、kN·m。梁均布荷载分析采用相应一致单位。显示不参与重新判定。')
-    st.latex(r'M_{\mathrm{N\cdot mm}}=10^6M_{\mathrm{kN\cdot m}},\quad V_{\mathrm N}=10^3V_{\mathrm{kN}},\quad q_{\mathrm{N/mm}}=q_{\mathrm{kN/m}}')
-    for latex in FORMULAS.get(name,[]):st.latex(latex)
-    if result.status!='success':st.caption('以上为该工具实现模型，当前工具未成功时不表示这些公式已被有效求值。')
-    if name in NOTES:st.info(NOTES[name])
-    for assumption in result.outputs.get('assumptions',[]):st.caption('采用假定：'+assumption)
-    st.markdown('#### 规范依据与版本')
-    for ref in result.code_refs:st.write('· '+ref)
-    st.caption('公式版本：'+result.formula_version)
-    st.markdown('#### 实际输入参数')
-    st.dataframe(input_rows(result),hide_index=True,width='stretch',column_config={'数值':st.column_config.NumberColumn(format='%.5g')})
-    with st.expander('实际工具输入 · 包括上游材料与几何'):
-        st.json(result.inputs)
-    with st.expander('原始工具结果、哈希与诊断'):
-        st.json(result.model_dump())
+    if checked is not None:
+        (st.success if checked else st.error)('本项验算'+('通过' if checked else '不通过'))
+    elif result.status!='success':st.warning('本项未完成有效计算，不能判定通过。')
+    for reason in result.errors+result.outputs.get('reasons',[]):st.write('· '+reason)
+    st.markdown('#### 分步计算 · 公式、代入与判定')
+    st.caption('代入值取自本轮实际计算记录；显示取舍不改变验算结论。')
+    steps=result.calculation_steps or calculation_steps(result)
+    for row in steps:
+        if row['title']=='工具总判定':continue
+        st.markdown('**'+str(row['step'])+'. '+row['title']+'**')
+        formula=step_formula(row)
+        if formula:st.latex(formula)
+        elif not row['substitution'].startswith('{'):st.caption(row['formula'])
+        substituted=numeric_latex(row['substitution'])
+        value=row['result']
+        if substituted:
+            rendered=numeric_latex(str(value)) if isinstance(value,(int,float)) and not isinstance(value,bool) else None
+            st.markdown('**代入：**')
+            st.latex(substituted+(r' = '+rendered if rendered else ''))
+        elif not row['substitution'].startswith('{'):
+            st.write('代入：'+row['substitution'])
+        if not substituted or not isinstance(value,(int,float)):
+            st.write('结果：'+(number(value,6) if isinstance(value,(float,int)) else str(value))+' '+row['unit'])
+        elif row['unit']:st.caption('单位：'+row['unit'])
+    with st.expander('采用参数与条件'):
+        from .projections import label
+        rows=[]
+        for key,value in result.inputs.get('parameters',{}).items():
+            if value is not None:
+                rows.append({'参数':label(key),'采用值':ENUMS.get(value,str(value)) if isinstance(value,str) else number(value,6)})
+        if rows:st.dataframe(rows,hide_index=True,width='stretch')
+        for assumption in result.outputs.get('assumptions',[]):st.write('· '+assumption)
+        if name in NOTES:st.caption(NOTES[name])
+    refs=professional_references(result.code_refs)
+    if refs:
+        with st.expander('规范依据'):
+            for ref in refs:st.write('· '+ref)
 
 
 def review(ctl):
@@ -308,15 +358,17 @@ def review(ctl):
     if state is None:return
     with st.container(border=True,key='card_review'):
         summary(state)
-        st.caption('请求状态：'+state.evaluation.status+' ｜ 规范检查：'+state.evaluation.code_status+' ｜ 完整工程审查：'+state.evaluation.overall_status)
-        for item in state.evaluation.unimplemented:st.caption('未覆盖：'+item)
+        with st.expander('适用范围与未覆盖项目'):
+            st.caption('规范检查：'+state.evaluation.code_status+' ｜ 完整工程审查：'+VERDICTS[state.evaluation.overall_status])
+            st.caption('计算配置：'+state.profile.version)
+            for item in state.evaluation.unimplemented:st.caption('未覆盖：'+item)
         download_buttons(ctl,'review')
     targets=[t for t in state.request.targets if t in TARGET_TOOLS]
     for tab,target in zip(st.tabs([LABELS[t] for t in targets]),targets):
         with tab:
             name=TARGET_TOOLS[target]; result=state.tool_results.get('evaluation.'+name)
             if result:tool_details(name,result)
-            else:st.warning('该项未得到工具结果，不能判定通过。')
+            else:st.warning('该项暂无验算结果。')
     with st.expander('其余实际计算步骤 · 材料、荷载、内力与设计'):
         names=[k for k in state.tool_results if k not in {'evaluation.'+TARGET_TOOLS[t] for t in targets}]
         if names:
@@ -334,33 +386,43 @@ def planning(ctl):
         calls=[vars(c) for c in ctl.calls]
         if not calls and state.role_events:
             calls=[{**e,'mode':e.get('mode','历史记录 · 模式未保存')} for e in state.role_events]
-        st.caption('角色调用与工程依赖是两种图。这里只展示真实调用或历史角色事件；离线角色不会被标成真实大模型。')
         if calls:
-            with st.container(border=True,key='card_agents'):st.graphviz_chart(agent_dot(calls,state),width='stretch')
-            index=st.selectbox('选择实际角色事件',range(len(calls)),format_func=lambda i:f'{i+1:02d} · {calls[i]["role"]} · {calls[i].get("mode","未记录")}')
-            call=calls[index]
-            st.write('**调用状态：** '+str(call['status']))
-            if call.get('elapsed_seconds') is not None:st.caption(f'适配层记录调用耗时：{call["elapsed_seconds"]:.3f} s；开始时间（UTC）：{call["started_at"]}')
-            st.caption('未记录模型内部思维、token或费用；工具逐项耗时也未由内核记录。')
-            a,b=st.columns(2)
-            with a:
-                st.markdown('#### 实际结构化输入')
+            run_ids=sorted({c.get('run_id',0) for c in calls})
+            batch=st.selectbox('运行批次', ['all', *run_ids], index=len(run_ids),
+                               format_func=lambda value:'全部历史' if value=='all' else '需求解析 / 初始记录' if value==0 else f'第 {value} 次运行',
+                               key='agent_batch')
+            visible=[c for c in calls if batch=='all' or c.get('run_id',0)==batch]
+            st.caption(f'本批次 {len(visible)} 条记录 · 全部历史 {len(calls)} 条')
+            statuses={'success':'完成','error':'失败','running':'执行中'}
+            modes={'offline':'离线角色','program':'程序执行','structured_file':'任务文件','DeepSeek':'DeepSeek'}
+            st.dataframe([{'顺序':i+1,'角色':c['role'],'执行方式':modes.get(c.get('mode'),c.get('mode','未记录')),
+                           '状态':statuses.get(c['status'],c['status']),
+                           '耗时/s':round(c['elapsed_seconds'],3) if c.get('elapsed_seconds') is not None else None}
+                          for i,c in enumerate(visible)],hide_index=True,width='stretch')
+            with st.expander('调用关系图'):
+                st.graphviz_chart(agent_dot(visible,state),width='stretch')
+            index=st.selectbox('选择实际角色事件',range(len(visible)),format_func=lambda i:f'{i+1:02d} · {visible[i]["role"]} · {visible[i].get("mode","未记录")}',key=f'agent_event_{batch}')
+            call=visible[index]
+            st.write('**调用状态：** '+statuses.get(call['status'],call['status']))
+            if call.get('elapsed_seconds') is not None:st.caption(f'调用耗时：{call["elapsed_seconds"]:.3f} s')
+            if call.get('diagnostic'):st.error(call['diagnostic'])
+            with st.expander('结构化输入与输出 · 调用证据'):
+                st.markdown('#### 实际输入')
                 if 'inputs' in call:st.json(call['inputs'])
                 else:st.info('该历史事件未保存调用输入。')
-            with b:
-                st.markdown('#### 实际结构化输出')
+                st.markdown('#### 实际输出')
                 if call.get('outputs') is not None:st.json(call['outputs'])
-                elif call.get('diagnostic'):st.error(call['diagnostic'])
                 else:st.info('该历史事件未保存完整调用输出。')
-        else:st.info('尚无实际角色调用；待执行计划不作为执行事件。')
+                if call.get('started_at'):st.caption('开始时间（UTC）：'+call['started_at'])
+        else:st.info('尚无角色调用记录。')
     with dag_tab:
         cols=st.columns(2)
         count=len(state.revisions)
         index=cols[0].selectbox('方案轮次',range(count),index=count-1,format_func=lambda i:f'修订 {state.revisions[i]["revision"]} · {VERDICTS[state.revisions[i]["evaluation"]["status"]]}') if count else None
         phase=cols[1].radio('执行阶段',['evaluation','design'],format_func=lambda x:'Evaluation · 独立验算' if x=='evaluation' else 'Design · 配筋设计',horizontal=True)
         nodes=dag_nodes(state,phase,index)
-        st.caption('绿色：已执行　蓝色：缓存复用　灰色：待执行计划　琥珀：阻断　红色：工具/模型失败。执行完成但检查不通过会另行标注。')
-        if not nodes:st.info('本轮没有执行该阶段，不生成虚构节点。')
+        st.caption('绿色：已执行　蓝色：缓存复用　灰色：待执行　琥珀：阻断　红色：执行失败')
+        if not nodes:st.info('本轮未执行该阶段。')
         else:
             selected=st.selectbox('选择节点查看详情',[n['name'] for n in nodes],format_func=lambda n:LABELS.get(n,n)+' · '+n,key=f'node_{phase}_{index}')
             graph,inspector=st.columns([1.65,1])
@@ -389,7 +451,7 @@ def planning(ctl):
         if not state.revisions:st.info('尚无执行修订。');return
         st.dataframe([{'修订':r['revision'],'本次轮次':r['iteration'],'原因':r.get('reason','未记录'),
                        '请求结论':VERDICTS[r['evaluation']['status']]} for r in state.revisions],hide_index=True,width='stretch')
-        if len(state.revisions)<2:st.info('目前只有一轮。修改参数后重新确认运行，或开启有限改设，可比较真实修订。');return
+        if len(state.revisions)<2:st.info('运行两轮后可比较修订。');return
         a,b=st.columns(2)
         before=a.selectbox('修改前',range(len(state.revisions)),index=len(state.revisions)-2,format_func=lambda i:f'修订 {state.revisions[i]["revision"]}')
         after=b.selectbox('修改后',range(len(state.revisions)),index=len(state.revisions)-1,format_func=lambda i:f'修订 {state.revisions[i]["revision"]}')
@@ -409,51 +471,50 @@ def expert(ctl):
     from engi_agent.engineering.consultation import ConsultationReply, basis_hash
     state=require_result(ctl)
     if state is None:return
-    st.caption('基于当前结果解释失败原因、计算依据和执行记录；明确修改会生成建议，采用后须确认并重新验算。')
-    st.info('修改保留当前实配方案并转为已有梁验算；保持原验算项目。新方案重新选筋请使用设计工作台。')
     query=st.text_area('向工程专家提问',key='expert_query',height=100,
         placeholder='例如：为什么强度通过仍可能挠度超限？／梁高改为600mm／活载改为6kN/m')
     live=st.session_state.execution_mode.startswith('DeepSeek')
-    st.caption('当前为DeepSeek意图解析，解释及数值来自实际工具。' if live else
-               '当前为离线规则咨询：支持检查解释及“梁高改为600mm”等明确赋值；自由表述请切换DeepSeek。')
-    if st.button('提交咨询',key='ask_expert',disabled=ctl.stage!='completed',type='primary'):
+    st.caption('DeepSeek 会结合当前实配方案和最近问答回答；明确修改仍需确认后验算。' if live else '离线咨询仅支持有限解释和明确修改；工程通识及连续对话请选择 DeepSeek 模式。')
+    if st.button('提交咨询',key='ask_expert',disabled=ctl.stage!='completed' or not query.strip(),type='primary'):
         try:
             with st.spinner('正在核对当前结果与问题…'):ctl.ask_expert(query,'DeepSeek' if live else 'offline')
             st.rerun()
         except ValueError as exc:st.error(str(exc))
-    for record in reversed(ctl.consultations):
+    for position,record in enumerate(reversed(ctl.consultations)):
         reply=ConsultationReply.model_validate(record)
-        with st.container(border=True):
+        with st.expander('咨询 · '+reply.query, expanded=position==0):
             st.markdown('**问题：** '+reply.query)
             stale=reply.basis_hash!=basis_hash(state) or ctl.stage!='completed'
             st.caption(f'依据：修订 {reply.revision}'+(' · 历史依据，不能采用' if stale else ' · 当前结果'))
             if reply.decision.intent=='unsupported':st.warning('该问题超出当前工程模型，请由工程师另行分析。')
             for question in reply.decision.questions:st.info(question)
             if reply.preview:
-                st.markdown('**参数建议 · 尚未计算修改后结果**')
+                st.markdown('**参数建议 · 待验算**')
+                st.caption('采用后保留现有配筋，转为已有梁验算。重新选筋请回设计工作台。')
                 st.dataframe([{k:v for k,v in row.items() if k!='field'} for row in reply.preview],hide_index=True,width='stretch')
                 if st.button('将建议写入待确认草稿',key='adopt_'+reply.id,disabled=stale or reply.applied):
                     try:ctl.adopt_expert_proposal(reply.id);st.rerun()
                     except ValueError as exc:st.error(str(exc))
                 if reply.applied:st.success('建议已写入草稿，请回到设计工作台确认后运行。')
+            answer=reply.answer or '\n\n'.join(item.text for item in reply.evidence)
+            if answer:st.markdown(answer)
             for item in reply.evidence:
-                st.markdown('**'+item.title+'**')
-                st.write(item.text)
-                if item.tool:
-                    # Historical evidence always uses the recorded output, never current values.
-                    shown=[{'项目':OUTPUTS.get(k,k),'记录值':number(v) if isinstance(v,(int,float)) and not isinstance(v,bool) else str(v)} for k,v in item.outputs.items()
-                           if not isinstance(v,(dict,list))]
-                    if shown:st.dataframe(shown,hide_index=True,width='stretch')
-                    for formula in FORMULAS.get(item.tool,[]):st.latex(formula)
-                if item.references:st.caption('依据：'+'；'.join(item.references))
-                with st.expander('本条解释的原始证据'):st.json(item.outputs)
-            st.caption(reply.limitation)
+                with st.expander('查看依据 · '+item.title):
+                    if item.tool:
+                        shown=[{'项目':OUTPUTS.get(k,k),'记录值':number(v,5) if isinstance(v,(int,float)) and not isinstance(v,bool) else str(v)}
+                               for k,v in item.outputs.items() if k in OUTPUTS and not isinstance(v,(dict,list))]
+                        if shown:st.dataframe(shown,hide_index=True,width='stretch')
+                    else:
+                        st.write(item.text)
+                    from engi_agent.engineering.references import professional_references
+                    for ref in professional_references(item.references):st.caption(ref)
+
 
 
 def experiments():
     from engi_agent.engineering.experiments import run_mechanism_experiment, experiment_markdown
     st.markdown('### 工程依赖与缓存 · 同内核机制对照')
-    st.caption('20种目标/修改组合，对比全量无缓存、按目标无缓存、按目标缓存；不发起模型请求。')
+    st.caption('20种目标/修改组合，对比全量无缓存、按目标无缓存、按目标缓存。')
     if st.button('运行机制对照实验',key='run_mechanism'):
         with st.spinner('正在执行真实工具并逐项核对输出…'):
             st.session_state.mechanism_record=run_mechanism_experiment()
@@ -465,7 +526,8 @@ def experiments():
                        '实际执行节点合计':r['executed_total'],'复用合计':r['reused_total'],
                        '单次耗时中位数/s':r['median_wall_seconds'],'请求项输出一致':r['all_equal_to_full']}
                       for r in record['summary']],hide_index=True,width='stretch')
-        for item in record['limitations']:st.caption(item)
+        with st.expander('实验范围'):
+            for item in record['limitations']:st.caption(item)
         a,b=st.columns(2)
         a.download_button('下载机制实验 JSON',json.dumps(record,ensure_ascii=False,indent=2),
                           'mechanism_ablation.json','application/json',on_click='ignore')
@@ -476,8 +538,8 @@ def experiments():
         st.markdown('### 统一案例对照 · 后续扩展')
         st.info('正式对照实验未执行')
         st.dataframe([{'执行组':label,'状态':'未执行','结果证据':'尚未提供'} for label in ('人工设计','通用 LLM','固定 Python 流程','EngiAgent 对照组')],hide_index=True,width='stretch')
-        st.caption('已有工程演示不冒充标准化对照实验；不生成准确率、耗时或token统计。')
-        st.markdown((ROOT/'docs/cn_experiment_protocol.md').read_text(encoding='utf-8'))
+        with st.expander('对照实验方案'):
+            st.markdown((ROOT/'docs/cn_experiment_protocol.md').read_text(encoding='utf-8'))
 
 
 def main():

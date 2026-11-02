@@ -136,7 +136,7 @@ class WorkbenchSession:
             self.calls.extend(calls)
             raise ValueError(self.errors[0]) from None
 
-    def apply(self, rows: list[dict], task_type: str, targets: list[str], auto: bool, iterations: int):
+    def apply(self, rows: list[dict], task_type: str, targets: list[str], auto: bool, iterations: int, *, search_diameters=None, solution_count=1):
         if self.draft is None: raise ValueError('请先加载案例或解析需求。')
         self.stage, self.errors = 'editing', []
         candidate = self.draft.request.model_copy(deep=True)
@@ -144,6 +144,8 @@ class WorkbenchSession:
         candidate.targets = ALL_TARGETS.copy() if task_type == 'new_design' else targets
         candidate.auto_redesign = bool(auto) if task_type == 'new_design' else False
         candidate.max_iterations = iterations
+        candidate.search_diameters_mm = list(search_diameters or []) if task_type == 'new_design' else []
+        candidate.solution_count = solution_count if task_type == 'new_design' else 1
         try:
             for row in rows:
                 key, text = row['字段'], str(row['输入值']).strip()
@@ -238,7 +240,7 @@ class WorkbenchSession:
                 return recorder._invoke('ExpertConsultation',
                     {'query':question,'current':evidence,'recent_consultations':history[-4:]},
                     lambda:inner.consult(question,evidence,history))
-        history=[{'query':r['query'],'decision':r['decision']} for r in self.consultations[-4:]]
+        history=[{'query':r['query'],'answer':r.get('answer',''),'decision':r['decision']} for r in self.consultations[-4:]]
         try:
             reply=consult(self.result,query,RecordedConsultant(),history)
         except ValueError as exc:
@@ -264,6 +266,28 @@ class WorkbenchSession:
         self.editor_generation+=1
         record['applied']=True
         return pending
+
+    def select_design_alternative(self, revision):
+        from engi_agent.engineering.cn_schema import ToolResult, EvaluationResult
+        if self.stage != 'completed' or self.result is None:
+            raise ValueError('请先完成当前草稿，才能选择已验证候选。')
+        if not any(r['revision'] == revision for r in self.result.design_alternatives):
+            raise ValueError('只能选择当前任务中已通过全部请求检查的候选。')
+        chosen = next(r for r in self.result.revisions if r['revision'] == revision)
+        if chosen['evaluation']['status'] != 'pass':
+            raise ValueError('候选未通过，不能选用。')
+        state = self.result.model_copy(deep=True)
+        state.candidate = chosen['candidate'].copy()
+        state.tool_results = {k:ToolResult.model_validate(v) for k,v in chosen['tools'].items()}
+        state.evaluation = EvaluationResult.model_validate(chosen['evaluation'])
+        state.plan_trace = [t.copy() for t in chosen['trace']]
+        state.execution_plan = list(state.tool_results)
+        state.design_revision = revision
+        self.result = state
+        self.draft = state.model_copy(deep=True)
+        self.editor_generation += 1
+        self.calls.append(AgentCall('EngineerSelection','user_selection',{'revision':revision},state.candidate.copy(),'success'))
+        return state
 
     def downloads(self):
         if self.result is None: return {}

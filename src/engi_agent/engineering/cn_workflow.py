@@ -11,7 +11,7 @@ from langgraph.graph import StateGraph, START, END
 from .roles import RoleClient
 from .cn_schema import (EngineeringState, EvaluationResult, ParameterValue, ProgressEvent,
                      TaskRequest, ToolResult, FACTORS, parameter_python)
-from .cn_schema import CNParameters, CNProfile, CN_UNITS, CN_INTEGERS, cn_required
+from .cn_schema import CNParameters, CNProfile, CN_UNITS, CN_INTEGERS, cn_required, DIAMETER_FIELDS, validate_diameter
 from .dependency_graph import SPECS, TARGET_TOOLS, build_plan, dependencies
 from . import cn_tools
 from .errors import EngineeringFailure
@@ -59,6 +59,9 @@ def normalize(request: TaskRequest) -> TaskRequest:
         if key in CN_INTEGERS:
             if float(item.value) != int(float(item.value)): raise ValueError(f'{key}必须为整数')
             item.value = str(int(float(item.value)))
+        if key in DIAMETER_FIELDS:
+            grade = request.parameters.get('stirrup_grade') if key == 'stirrup_diameter_mm' else None
+            validate_diameter(key, item.value, grade.value if grade else None)
         value = TypeAdapter(CNParameters.model_fields[key].rebuild_annotation()).validate_python(parameter_python(key, item))
         if isinstance(value, (int, float)) and not math.isfinite(value):
             raise ValueError(f'{key}必须为有限数值')
@@ -103,15 +106,16 @@ def confirm(state):
 def revise(state, changes, *, targets=None):
     """Create an unconfirmed revision; caller must confirm again before execution."""
     revised = state.model_copy(deep=True)
+    next_revision = max([state.design_revision, *(r['revision'] for r in state.revisions)]) + 1
     for key, raw in changes.items():
         item = raw if isinstance(raw, ParameterValue) else ParameterValue.model_validate(raw)
         item = item.model_copy(deep=True)
         item.confirmed = False; item.raw_value = None; item.raw_unit = None
-        item.revision = state.design_revision+1
+        item.revision = next_revision
         revised.request.parameters[key] = item
     if targets is not None: revised.request.targets = targets
     revised.confirmed = False; revised.confirmation_hash = None
-    revised.design_revision += 1
+    revised.design_revision = next_revision
     revised.revision_reason='用户修改：'+','.join(changes) if changes else '重新核对原参数'
     revised.cache.update(state.tool_results)
     return confirm_preparation(revised)
@@ -166,6 +170,8 @@ def _run_plan(state, params, phase, roles, on_event):
         result.formula_version = SPECS[name].version
         result.code_refs = REFS[name]+['docs/rc_beam_cn_design_spec.md','docs/rc_beam_cn_formula_review.md']
         result.revision = state.design_revision
+        from .calculation_trace import calculation_steps
+        result.calculation_steps = calculation_steps(result)
         state.tool_results[key] = result
         state.plan_trace.append(dict(revision=state.design_revision, phase=phase, tool=name, action=action,
                                      reason='输入及版本一致' if action=='reuse' else '依赖输入变化' if action=='invalidate_execute' else
@@ -200,6 +206,7 @@ def run_engineering(state, roles, on_event=None):
     context = {'parameters': base.copy(), 'minimum_bar_count': 2, 'iteration': 0,'reason':state.revision_reason}
     state.errors = []; state.tool_results = {}; state.execution_plan = []; state.plan_trace = []
     state.evaluation = EvaluationResult()
+    state.design_alternatives = []; state.search_stop_reason = ''
 
     def design(data):
         s = data['state']; p = context['parameters'].copy()
@@ -250,32 +257,66 @@ def run_engineering(state, roles, on_event=None):
 
     def next_step(data):
         s = data['state']
-        if s.request.task_type != 'new_design' or not s.request.auto_redesign or s.evaluation.status != 'fail': return END
+        if s.request.task_type != 'new_design' or not s.request.auto_redesign:
+            if s.evaluation.status == 'fail':
+                s.search_stop_reason = '自动改设未开启；这是未通过的候选，尚未完成新设计。'
+            return END
+        if s.evaluation.status == 'error':
+            s.search_stop_reason = '执行异常，停止搜索；不把模型或工具错误当成工程方案失败。'
+            return END
+        passed = sum(r['evaluation']['status'] == 'pass' for r in s.revisions[start_revision:])
+        if passed >= s.request.solution_count:
+            s.search_stop_reason = '已获得确认数量的通过候选。'
+            return END
         if context['iteration'] >= s.request.max_iterations:
-            s.errors.append('已达到确认的改设轮次上限，未获得通过方案'); return END
+            s.search_stop_reason = '已达到确认的改设轮次上限；仅在已授权候选范围内搜索。'
+            if not passed: s.errors.append('已达到确认的改设轮次上限，未获得通过方案')
+            return END
         return 'revise'
 
     def redesign(data):
-        s = data['state']; context['minimum_bar_count'] = s.candidate.get('bar_count', context['minimum_bar_count'])+1
-        failed=[t for t,ok in s.evaluation.checks.items() if not ok]
-        context['reason']='未通过项目：'+','.join(failed)+'；同直径纵筋候选增加至至少'+str(context['minimum_bar_count'])+'根'
-        # Fixed supplied dimensions are never changed. Unspecified height can grow within an explicit maximum.
-        if not s.candidate and 'beam_depth_mm' not in base and 'max_depth_mm' in base:
-            last = s.tool_results.get('design.section_sizing')
-            if last and last.status=='success':
-                context['parameters']['beam_depth_mm'] = min(base['max_depth_mm'],last.outputs['beam_depth_mm']+50)
-                context['reason']+='；在明确上限内调整未固定的梁高'
+        s = data['state']
+        failed = [t for t, ok in s.evaluation.checks.items() if not ok]
+        current_diameter = context['parameters']['bar_diameter_mm']
+        options = s.request.search_diameters_mm
+        # Move to the next explicitly authorized diameter after success or layout failure.
+        next_diameter = next((d for d in options if d not in tried_diameters), None)
+        if next_diameter is not None and (s.evaluation.status == 'pass' or 'detailing' in failed or not s.candidate):
+            context['parameters']['bar_diameter_mm'] = next_diameter
+            tried_diameters.add(next_diameter)
+            context['minimum_bar_count'] = 2
+            action = f'切换到确认目录中的直径{next_diameter}mm，重新选筋并复核全部项目'
+        else:
+            context['minimum_bar_count'] = s.candidate.get('bar_count', context['minimum_bar_count']) + 1
+            action = f'保持直径{current_diameter}mm，纵筋至少{context["minimum_bar_count"]}根；全部项目重新复核'
+        context['reason'] = ('未通过项目：'+','.join(failed) if failed else '继续搜索不同实配候选')+'；'+action
         s.design_revision += 1
         s.tool_results = {}; s.errors = []; s.evaluation = EvaluationResult()
         return {'state':s}
 
+    start_revision = len(state.revisions)
+    tried_diameters = {base.get('bar_diameter_mm')}
     graph = StateGraph(dict)
     graph.add_node('design', design); graph.add_node('evaluation', evaluate); graph.add_node('revise', redesign)
     graph.add_conditional_edges(START, lambda d:'design' if d['state'].request.task_type=='new_design' else 'evaluation')
     graph.add_edge('design','evaluation'); graph.add_conditional_edges('evaluation',next_step)
     graph.add_edge('revise','design')
     try:
-        return graph.compile().invoke({'state':state}, config={'recursion_limit':3*state.request.max_iterations+5})['state']
+        final = graph.compile().invoke({'state':state}, config={'recursion_limit':3*state.request.max_iterations+5})['state']
+        if final.request.task_type == 'new_design':
+            passed = [r for r in final.revisions[start_revision:] if r['evaluation']['status'] == 'pass']
+            final.design_alternatives = [dict(revision=r['revision'], candidate=r['candidate'], checks=r['evaluation']['checks']) for r in passed]
+            if passed:
+                # Recommend only among verified candidates; area is a transparent proxy, not cost.
+                chosen = min(passed, key=lambda r:r['candidate']['As_mm2'])
+                final.candidate = chosen['candidate'].copy()
+                final.tool_results = {k:ToolResult.model_validate(v) for k,v in chosen['tools'].items()}
+                final.evaluation = EvaluationResult.model_validate(chosen['evaluation'])
+                final.design_revision = chosen['revision']
+                final.plan_trace = [t.copy() for t in chosen['trace']]
+                final.execution_plan = list(final.tool_results)
+                final.errors = []
+        return final
     except Exception as exc:
         return error_state(state, f'中国规范工作流异常（{type(exc).__name__}），未形成通过结论')
 

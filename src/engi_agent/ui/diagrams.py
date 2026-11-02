@@ -38,7 +38,7 @@ def beam_svg(parameters, candidate=None):
                 parts.append(f'<line x1="{x}" y1="91" x2="{x}" y2="{y-10}" stroke="#547395" marker-end="url(#arrow)"/>')
             mode={'excluded':'恒载另计梁自重','included':'恒载已含自重'}.get(p.get('self_weight_mode'),'自重约定未提供')
             parts.append(f'<text x="58" y="66">Gk = {esc(fmt(p["dead_load_kn_m"]))} kN/m · Qk = {esc(fmt(p["live_load_kn_m"]))} kN/m</text>')
-            parts.append(f'<text x="58" y="318" font-size="12" fill="#708095">{mode}；支座为约束符号，图形不作为节点详图。</text>')
+            parts.append(f'<text x="58" y="318" font-size="12" fill="#708095">{mode}</text>')
         else:
             parts.append('<text x="58" y="90" fill="#708095">未提供线荷载，不绘制荷载箭头</text>')
         if p.get('support_width_mm'):
@@ -64,7 +64,6 @@ def beam_svg(parameters, candidate=None):
         if p.get('bar_count') and p.get('bar_diameter_mm'):
             parts.append(f'<text x="{x}" y="{y+height+49}">下部 {esc(fmt(p["bar_count"]))}Φ{esc(fmt(p["bar_diameter_mm"]))}</text>')
         else:parts.append(f'<text x="{x}" y="{y+height+49}" fill="#708095">下部配筋待确定</text>')
-        parts.append('<text x="744" y="333" font-size="11" fill="#708095">腰筋未定位绘制；以参数和构造结果为准</text>')
     else:parts.append('<text x="738" y="160" fill="#708095">截面尺寸不全，暂不绘制</text>')
     return ''.join(parts+['</g></svg>'])
 

@@ -17,6 +17,20 @@ class CNProfile(Contract):
     source_note: str = '普通房屋、50年、二级安全、单一不利重力可变作用；不含抗震专项'
 
 
+# Explicit project catalogue, not a claim that all other products are prohibited by law.
+REBAR_DIAMETERS = (6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 28, 32, 36, 40, 50)
+DIAMETER_FIELDS = {'bar_diameter_mm', 'stirrup_diameter_mm', 'top_bar_diameter_mm', 'side_bar_diameter_mm'}
+
+
+def validate_diameter(name, value, grade=None):
+    allowed = REBAR_DIAMETERS[:10] if grade == 'HPB300' else REBAR_DIAMETERS
+    if name == 'side_bar_diameter_mm' and value == 0:
+        return value
+    if value not in allowed:
+        raise ValueError(f'{name}={value}mm不在程序支持的公称直径目录中：{allowed}；不接受任意直径或自动取整')
+    return value
+
+
 class CNParameters(Contract):
     support_type: Literal['simply_supported']
     load_case: Literal['full_span_udl']
@@ -61,6 +75,11 @@ class CNParameters(Contract):
     side_bar_spacing_mm: float | None = Field(default=None, gt=0)
     support_width_mm: float = Field(gt=0)
     shear_position_mm: float | None = Field(default=None, ge=0)
+
+    @field_validator('bar_diameter_mm', 'stirrup_diameter_mm', 'top_bar_diameter_mm', 'side_bar_diameter_mm')
+    @classmethod
+    def supported_diameter(cls, value, info):
+        return validate_diameter(info.field_name, value)
 
     @model_validator(mode='before')
     @classmethod
@@ -127,8 +146,26 @@ class TaskRequest(Contract):
     task_type: Literal["new_design", "evaluate_existing", "unsupported"]
     parameters: dict[str, ParameterValue] = Field(default_factory=dict)
     targets: list[Target] = Field(default_factory=lambda: ["flexure", "shear", "detailing", "crack", "deflection"])
+    search_diameters_mm: list[int] = Field(default_factory=list, max_length=8)
+    solution_count: int = Field(default=1, ge=1, le=3)
     user_query: str = ""
     clarification: list[str] = Field(default_factory=list)
+
+    @model_validator(mode='before')
+    @classmethod
+    def design_defaults(cls, value):
+        if isinstance(value, dict) and value.get('task_type') == 'new_design' and 'auto_redesign' not in value:
+            return {**value, 'auto_redesign': True}
+        return value
+
+    @field_validator('search_diameters_mm')
+    @classmethod
+    def search_catalog(cls, value):
+        if len(value) != len(set(value)):
+            raise ValueError('候选直径不能重复')
+        for diameter in value:
+            validate_diameter('bar_diameter_mm', diameter)
+        return value
 
     @field_validator("targets")
     @classmethod
@@ -159,6 +196,7 @@ class ToolResult(Contract):
     code_refs: list[str] = Field(default_factory=lambda: ["docs/rc_beam_cn_design_spec.md"])
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
+    calculation_steps: list[dict[str, Any]] = Field(default_factory=list)
     revision: int = 1
     formula_version: str = "cn-rc-2024-v1"
 
@@ -205,3 +243,5 @@ class EngineeringState(Contract):
     plan_trace: list[dict[str, Any]] = Field(default_factory=list)
     revisions: list[dict[str, Any]] = Field(default_factory=list)
     revision_reason: str = '初始任务'
+    design_alternatives: list[dict[str, Any]] = Field(default_factory=list)
+    search_stop_reason: str = ''

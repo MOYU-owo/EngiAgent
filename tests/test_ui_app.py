@@ -43,7 +43,7 @@ def test_web_height_edit_requires_validation_confirmation_and_reuses():
     ctl=at.session_state['workbench'];g=ctl.editor_generation
     # Set the documented data_editor widget edit state, including its dirty callback.
     ctl.mark_dirty()
-    at.session_state[f'editor_几何_{g}']={'edited_rows':{5:{'输入值':'600'}},'added_rows':[],'deleted_rows':[]}
+    at.session_state[f'editor_几何_{g}']={'edited_rows':{2:{'输入值':'600'}},'added_rows':[],'deleted_rows':[]}
     at.run()
     assert at.button(key='run').disabled and at.button(key='confirm').disabled
     at.button(key='validate').click().run()
@@ -95,3 +95,80 @@ def test_web_mechanism_experiment_is_explicit_and_not_repeated_on_render():
     assert len(record['rows'])==180 and all(r['equal_to_full'] for r in record['rows'])
     at.run()
     assert at.session_state['mechanism_record']['completed_at_utc']==stamp
+
+
+def test_missing_parameters_are_located_in_their_group_and_cannot_confirm():
+    at=app()
+    ctl=at.session_state['workbench']
+    request=ctl.draft.request.model_copy(deep=True)
+    request.parameters.pop('live_load_kn_m')
+    ctl.load(request,'缺项案例')
+    at.run()
+    assert not at.exception
+    assert any(tab.label=='荷载 · 缺1项' for tab in at.tabs)
+    assert any('本组必填缺项：活载' in item.value for item in at.warning)
+    assert at.button(key='confirm').disabled and at.button(key='run').disabled
+    assert ctl.completed_runs==0
+
+
+def test_batch_filter_and_consultation_disclosure_do_not_execute_again():
+    at=app('已有梁独立验算')
+    at.button(key='confirm').click().run();at.button(key='run').click().run()
+    ctl=at.session_state['workbench']
+    at.radio(key='nav').set_value('Agent 与动态规划').run()
+    count=len(ctl.calls)
+    at.selectbox(key='agent_batch').select('all').run()
+    at.selectbox(key='agent_batch').select(1).run()
+    assert not at.exception and len(ctl.calls)==count and ctl.completed_runs==1
+    at.radio(key='nav').set_value('专家咨询').run()
+    assert at.button(key='ask_expert').disabled
+    at.text_area(key='expert_query').set_value('梁高改为600mm').run()
+    at.button(key='ask_expert').click().run()
+    assert not at.exception
+    assert any(item.label.startswith('查看依据') for item in at.expander)
+    count=len(ctl.calls)
+    at.run()
+    assert len(ctl.calls)==count and ctl.completed_runs==1
+
+
+def test_material_selection_requires_validation_and_does_not_fill_missing_grade():
+    at=app()
+    ctl=at.session_state['workbench']
+    request=ctl.draft.request.model_copy(deep=True)
+    request.parameters.pop('concrete_grade')
+    ctl.load(request,'未指定混凝土等级')
+    at.run()
+    generation=ctl.editor_generation
+    assert at.selectbox(key=f'enum_concrete_grade_{generation}').value is None
+    assert at.button(key='confirm').disabled and at.button(key='run').disabled
+    at.button(key='validate').click().run()
+    assert 'concrete_grade' in ctl.draft.missing_parameters
+    assert at.button(key='confirm').disabled and ctl.completed_runs==0
+    generation=ctl.editor_generation
+    at.selectbox(key=f'enum_concrete_grade_{generation}').select('C40').run()
+    at.button(key='validate').click().run()
+    assert not at.exception
+    assert ctl.draft.request.parameters['concrete_grade'].value=='C40'
+    assert ctl.stage=='validated' and not ctl.draft.confirmed
+
+
+def test_report_feedback_search_selection_and_calculation_steps():
+    import runpy
+    from engi_agent.ui.service import WorkbenchSession
+    make=runpy.run_path(str(ROOT/'examples/reproduce_report_feedback.py'))['report_request']
+    r=make();r.auto_redesign=True;r.solution_count=2;r.search_diameters_mm=[20,22];r.max_iterations=6
+    ctl=WorkbenchSession();ctl.load(r,'用户计算书复现')
+    at=AppTest.from_file(str(ROOT/'streamlit_app.py'),default_timeout=30).run()
+    at.session_state['workbench']=ctl;at.run()
+    at.button(key='confirm').click().run();at.button(key='run').click().run()
+    assert not at.exception
+    assert ctl.result.candidate['bar_diameter_mm']==22
+    calls=len(ctl.calls)
+    at.selectbox(key='verified_alternative').select(2).run()
+    at.button(key='select_alternative').click().run()
+    assert not at.exception and ctl.result.candidate['bar_diameter_mm']==20
+    assert len(ctl.calls)==calls+1 and ctl.completed_runs==1
+    at.radio(key='nav').set_value('计算与规范复核').run()
+    assert not at.exception
+    assert any('分步计算' in element.value for element in at.markdown)
+    assert any('代入：' in element.value for element in at.markdown)

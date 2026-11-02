@@ -61,6 +61,8 @@ class DeepSeekRoles:
         response = self.model.with_structured_output(TaskRequest, method="function_calling").invoke(
             [SystemMessage(content=prompt), HumanMessage(content=query)])
         result = TaskRequest.model_validate(response)
+        if result.task_type == 'new_design':
+            result.auto_redesign = not any(text in query for text in ('关闭自动改设','不自动改设','关闭自动优化'))
         result.user_query = query
         for item in result.parameters.values():
             item.source, item.confirmed = "llm_extracted", False
