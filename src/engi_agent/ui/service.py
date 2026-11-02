@@ -5,15 +5,15 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
-from typing import Callable, Literal, Any
+from typing import Callable, Literal
 import json
 
-from engi_agent.engineering.schema import EngineeringState, TaskRequest, ParameterValue
-from engi_agent.engineering.workflow import prepare, confirm, run_engineering
+from engi_agent.engineering.cn_schema import EngineeringState, TaskRequest, ParameterValue
+from engi_agent.engineering.cn_workflow import prepare, confirm, run_engineering
 from engi_agent.engineering.cn_workflow import revise, ALL_TARGETS
 from engi_agent.engineering.cn_schema import CN_UNITS
 from engi_agent.engineering.roles import FixtureRoles, DeepSeekRoles, RolePlan, ProgramRoles
-from engi_agent.engineering.reporting import markdown_report
+from engi_agent.engineering.cn_presentation import markdown_report
 
 ROOT = Path(__file__).resolve().parents[3]
 CASES = {
@@ -99,8 +99,6 @@ class WorkbenchSession:
                 for value in self.draft.request.parameters.values():value.confirmed=False
 
     def load(self, request: TaskRequest, name: str, *, record_read=True):
-        if request.code != 'cn-2024':
-            raise ValueError('当前工作台支持cn-2024；原教学模式请继续使用CLI。')
         if request.task_type=='unsupported':
             raise ValueError('此任务超出简支矩形RC梁、全跨均布恒活载及单层受拉筋范围，未加载或执行。')
         request=request.model_copy(deep=True)
@@ -275,16 +273,3 @@ class WorkbenchSession:
             'audit': json.dumps({'calls':[vars(c) for c in self.calls], 'runs':self.audit_runs,
                                  'consultations':self.consultations},ensure_ascii=False,indent=2).encode('utf-8'),
         }
-
-
-@dataclass
-class ExperimentRecord:
-    """Reserved input contract, with unknown measurements explicitly nullable."""
-    case_id: str
-    group: Literal['human','general_llm','fixed_python','engiagent']
-    code_version: str
-    evidence: list[str] = field(default_factory=list)
-    status: Literal['not_run','completed','error'] = 'not_run'
-    elapsed_seconds: float | None = None
-    tokens: int | None = None
-    cost: float | None = None

@@ -1,1 +1,0 @@
-"""Prompt definitions for EngiAgent."""

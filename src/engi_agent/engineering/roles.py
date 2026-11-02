@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Literal, Protocol
 from pydantic import Field
 from langchain.messages import HumanMessage, SystemMessage
-from .schema import Contract, TaskRequest, UNITS
+from .cn_schema import Contract, TaskRequest
+from .cn_schema import CN_UNITS
 
 
 class RolePlan(Contract):
@@ -29,28 +31,33 @@ class DeepSeekRoles:
         self.model = model
 
     def parse(self, query: str) -> TaskRequest:
+        # An explicit foreign-code request must never be silently reinterpreted.
+        foreign = r'(?:ACI(?![A-Za-z])|Eurocode(?![A-Za-z])|EN\s*199\d|BS\s*8110|美标|欧标|美国规范|欧洲规范)'
+        if re.search(r'(?:(?:按照?|采用|使用|依据|执行|遵循)\s*(?:美国\s*)?|\b(?:use|using|per|according to)\s+)' + foreign,
+                     query, re.IGNORECASE):
+            return TaskRequest(task_type='unsupported', user_query=query,
+                               clarification=['仅支持中国规范，不能按指定的其他规范计算。'])
         prompt = (
             "你是工程任务 Dispatcher，仅提取用户明确提供的参数，不计算、不补齐默认值。"
             "仅支持简支矩形RC梁、全跨均布恒活载、单层受拉筋。其他结构/荷载标 unsupported。"
-            "task_type: new_design/evaluate_existing/unsupported。先识别规范体系：用户要求中国规范时code=cn-2024，否则code=teaching。"
-            "teaching的targets为flexure/shear/elastic_deflection；cn-2024为flexure/shear/detailing/crack/deflection。"
+            "task_type: new_design/evaluate_existing/unsupported。本系统仅支持中国规范，code必须为cn-2024。"
+            "targets仅允许flexure/shear/detailing/crack/deflection。明确要求其他国家规范的任务标unsupported，不得转成中国规范计算。"
             "中国规范新设计选flexure,shear,detailing,crack,deflection；既有梁按指定目标。"
             "已明确简支/矩形/均布/单层分别提取 support_type=simply_supported, section_type=rectangular,"
             "load_case=full_span_udl, reinforcement_layers=1。不要从未说明的条件推断这些值。"
             "参数值通过 parameters 字典返回，每项含value/unit/source=llm_extracted/confirmed=false。"
             "self_weight_mode: excluded 表示用户恒载不含自重需程序计入，included表示已含，"
-            "ignore只在用户明确要求忽略时使用。fc_mpa是圆柱抗压强度，不转换中国混凝土等级。"
-            "cn-2024改提取concrete_grade=C30等、steel_grade=HRB400等、stirrup_grade=HRB400等，不提取fc_mpa/fy_mpa/elastic_modulus_mpa。"
+            "不支持忽略自重，不得使用ignore。"
+            "提取concrete_grade=C30等、steel_grade=HRB400等、stirrup_grade=HRB400等，不提取fc_mpa/fy_mpa/elastic_modulus_mpa。"
             "中国规范参数名称见后附CN字段；重要性、安全等级、环境、寿命、活载系数和构造输入均仅按用户明确说明提取。"
             "一类环境environment_class=I，安全等级二级safety_class=2（数值，不填汉字）。每侧腰筋根数独立于上下纵筋。"
             "已给设计弯矩用design_moment_kn_m，单位kN·m。新设计不需要用户提供bar_count或stirrup_spacing_mm，不把它们列为缺项。"
-            "fy与stirrup_fy必须分别有用户依据；箍筋肢数也必须提取。"
-            "单位保留已知原单位，用mm,m,in,ft,mm2,in2,MPa,GPa,psi,ksi,kN/m,kip/ft,kN/m3,lb/ft3。"
+            "挠度限值L/250提取deflection_limit_ratio=250（仅数值分母，unit=null）。"
+            "纵筋、箍筋牌号分别有用户依据；箍筋肢数也必须提取。"
+            "单位保留已知原单位，支持mm,m,cm,kN/m,N/mm,N/m,kN/m3,N/m3,kN·m,kN*m,N·mm,kN,N。"
             "无量纲和枚举unit=null。缺失字段留空并列入clarification；禁止补造。"
-            f"教学字段名及单位：{json.dumps(UNITS, ensure_ascii=False)}"
+            f"中国规范字段及单位：{json.dumps(CN_UNITS, ensure_ascii=False)}"
         )
-        from .cn_schema import CN_UNITS
-        prompt += '中国规范字段及单位：'+json.dumps(CN_UNITS,ensure_ascii=False)
         response = self.model.with_structured_output(TaskRequest, method="function_calling").invoke(
             [SystemMessage(content=prompt), HumanMessage(content=query)])
         result = TaskRequest.model_validate(response)

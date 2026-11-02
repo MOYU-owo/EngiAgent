@@ -1,123 +1,56 @@
-from langchain.messages import AIMessage
-
-from engi_agent.agent import EngiAgent, build_graph
+"""Structured CN model roles; no generic chat/tool-execution runtime remains."""
+import pytest
+from engi_agent.engineering.roles import DeepSeekRoles, RolePlan
+from engi_agent.engineering.cn_schema import TaskRequest
+from engi_agent.engineering.cn_workflow import prepare
 
 
 class ScriptedModel:
-    """Small fake chat model that returns a predetermined response sequence."""
+    def __init__(self, response):
+        self.response = response
+        self.messages = []
+        self.contract = None
 
-    def __init__(self, responses):
-        self.responses = list(responses)
-        self.bound_tools = None
-        self.invocations = []
-
-    def bind_tools(self, tools):
-        self.bound_tools = tools
+    def with_structured_output(self, contract, method):
+        self.contract = contract
+        assert method == "function_calling"
         return self
 
     def invoke(self, messages):
-        self.invocations.append(messages)
-        return self.responses.pop(0)
+        self.messages = messages
+        return self.response
 
 
-def make_agent(responses, thread_id="test-thread"):
-    model = ScriptedModel(responses)
-    return EngiAgent(build_graph(model=model), thread_id=thread_id), model
+def test_unspecified_standard_defaults_to_cn_without_supplying_engineering_defaults():
+    model = ScriptedModel({"task_type": "new_design", "parameters": {"span_mm": {"value": 6, "unit": "m"}}})
+    parsed = DeepSeekRoles(model).parse("新设计简支梁，跨度6m")
+    assert model.contract is TaskRequest and parsed.code == "cn-2024"
+    assert parsed.user_query == "新设计简支梁，跨度6m"
+    assert set(parsed.parameters) == {"span_mm"}
+    assert parsed.parameters["span_mm"].source == "llm_extracted"
+    assert not parsed.parameters["span_mm"].confirmed
+    assert "concrete_grade" in prepare(parsed).missing_parameters
+    prompt = model.messages[0].content
+    assert "仅支持中国规范" in prompt and "cn-2024" in prompt
+    assert "code=teaching" not in prompt and "phi_flexure" not in prompt
 
 
-def test_case_1_normal_chat_does_not_call_tools():
-    agent, _ = make_agent([AIMessage(content="你好！")])
-    response = agent.run_turn("你好")
-    assert response.content == "你好！"
-    assert response.tool_events == []
+@pytest.mark.parametrize("code", ["teaching", "ACI318-19", "eurocode"])
+def test_provider_cannot_select_another_standard(code):
+    model = ScriptedModel({"code": code, "task_type": "new_design"})
+    with pytest.raises(ValueError): DeepSeekRoles(model).parse("设计一根梁")
 
 
-def test_case_2_calculation_calls_calculator():
-    agent, _ = make_agent(
-        [
-            AIMessage(
-                content="",
-                tool_calls=[
-                    {
-                        "name": "calculator",
-                        "args": {"expression": "12.5 * 8"},
-                        "id": "calc-1",
-                        "type": "tool_call",
-                    }
-                ],
-            ),
-            AIMessage(content="结果是 100。"),
-        ]
-    )
-    response = agent.run_turn("计算 12.5 × 8。")
-    assert response.content == "结果是 100。"
-    assert any("calculator" in event for event in response.tool_events)
-    assert any("100.0" in event for event in response.tool_events)
+@pytest.mark.parametrize("query", ["按ACI 318-19设计简支梁", "采用美标设计梁", "依据Eurocode验算梁", "Use ACI 318 for beam design"])
+def test_explicit_foreign_code_request_is_rejected_without_model_calls(query):
+    model = ScriptedModel(None)
+    result = DeepSeekRoles(model).parse(query)
+    assert result.code == "cn-2024" and result.task_type == "unsupported"
+    assert result.clarification and not model.messages
 
 
-def test_case_3_knowledge_question_calls_knowledge_tool():
-    agent, _ = make_agent(
-        [
-            AIMessage(
-                content="",
-                tool_calls=[
-                    {
-                        "name": "get_demo_knowledge",
-                        "args": {"query": "安全系数"},
-                        "id": "knowledge-1",
-                        "type": "tool_call",
-                    }
-                ],
-            ),
-            AIMessage(content="Demo 安全系数是 1.5。"),
-        ]
-    )
-    response = agent.run_turn("demo 规范中的安全系数是多少？")
-    assert "1.5" in response.content
-    assert any("get_demo_knowledge" in event for event in response.tool_events)
-
-
-def test_case_4_combined_question_calls_both_tools():
-    agent, _ = make_agent(
-        [
-            AIMessage(
-                content="",
-                tool_calls=[
-                    {
-                        "name": "calculator",
-                        "args": {"expression": "12.5 * 8"},
-                        "id": "calc-2",
-                        "type": "tool_call",
-                    },
-                    {
-                        "name": "get_demo_knowledge",
-                        "args": {"query": "安全系数"},
-                        "id": "knowledge-2",
-                        "type": "tool_call",
-                    },
-                ],
-            ),
-            AIMessage(content="计算结果为 100，Demo 安全系数为 1.5。"),
-        ]
-    )
-    response = agent.run_turn("计算 12.5 × 8，同时告诉我安全系数。")
-    calls = [event for event in response.tool_events if event.startswith("[Tool call]")]
-    assert len(calls) == 2
-    assert any("calculator" in event for event in calls)
-    assert any("get_demo_knowledge" in event for event in calls)
-
-
-def test_case_5_checkpointer_keeps_multi_turn_messages():
-    agent, model = make_agent(
-        [
-            AIMessage(content="好的，我记住当前项目跨度是 6m。"),
-            AIMessage(content="刚才的跨度是 6m。"),
-        ],
-        thread_id="memory-case",
-    )
-    agent.run_turn("记住当前项目跨度是 6m。")
-    response = agent.run_turn("刚才的跨度是多少？")
-
-    second_call_text = " ".join(str(message.content) for message in model.invocations[1])
-    assert "当前项目跨度是 6m" in second_call_text
-    assert response.content == "刚才的跨度是 6m。"
+def test_model_plan_returns_only_structured_steps_and_explanation():
+    model = ScriptedModel({"steps": ["materials", "flexural_check"], "explanation": "先取材料再验算"})
+    plan = DeepSeekRoles(model).plan("Evaluation", {"required_steps": ["materials", "flexural_check"]})
+    assert model.contract is RolePlan and plan.steps == ["materials", "flexural_check"]
+    assert "不计算数值" in model.messages[0].content

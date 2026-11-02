@@ -1,11 +1,10 @@
 """Pure projections of actual records. No capacity or compliance recalculation."""
 from __future__ import annotations
-import json
-from engi_agent.engineering.schema import EngineeringState, ToolResult, parameter_python
+from engi_agent.engineering.cn_schema import ToolResult, parameter_python
 from engi_agent.engineering.cn_schema import CN_UNITS
 from engi_agent.engineering.cn_presentation import CN_FIELDS, LABELS, OUTPUTS
-from engi_agent.engineering.presentation import FIELDS, SOURCES, parameter_rows, PARAMETER_HEADERS
-from engi_agent.engineering.dependency_graph import SPECS, build_plan, dependencies, TARGET_TOOLS
+from engi_agent.engineering.cn_presentation import FIELDS, parameter_rows, PARAMETER_HEADERS
+from engi_agent.engineering.dependency_graph import build_plan, dependencies, TARGET_TOOLS
 
 STAGES={'empty':'未加载','editing':'待校验','validated':'待确认','confirmed':'已确认 · 待运行',
         'parsing':'解析中','running':'执行中','completed':'执行已结束','error':'操作未完成'}

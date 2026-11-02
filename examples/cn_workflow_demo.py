@@ -1,11 +1,11 @@
 """Offline acceptance demonstration: five scenarios plus selective recomputation."""
 import json
 from pathlib import Path
-from engi_agent.engineering.schema import TaskRequest
-from engi_agent.engineering.workflow import prepare,confirm,run_engineering
+from engi_agent.engineering.cn_schema import TaskRequest
+from engi_agent.engineering.cn_workflow import prepare,confirm,run_engineering
 from engi_agent.engineering.cn_workflow import revise
 from engi_agent.engineering.roles import FixtureRoles
-from engi_agent.engineering.reporting import markdown_report
+from engi_agent.engineering.cn_presentation import markdown_report
 
 
 def main():

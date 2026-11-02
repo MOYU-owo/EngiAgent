@@ -85,9 +85,9 @@
 推荐从 [快速使用说明](cn_quickstart.md) 开始：
 
 ```powershell
-python run.py --engineering --offline --request examples/engineering/cn_design.json
-python run.py --engineering --offline --request examples/engineering/cn_existing.json --session
-python run.py --engineering --base-request examples/engineering/cn_design.json --query "按中国规范新设计一根梁，跨度6m，其余采用指定模板。"
+python run.py --offline --request examples/engineering/cn_design.json
+python run.py --offline --request examples/engineering/cn_existing.json --session
+python run.py --base-request examples/engineering/cn_design.json --query "按中国规范新设计一根梁，跨度6m，其余采用指定模板。"
 ```
 
 ## 保留的边界与后续事项
@@ -96,4 +96,4 @@ python run.py --engineering --base-request examples/engineering/cn_design.json -
 
 `evaluation.status=pass`表示本次请求的实现项目通过；`overall_status=incomplete`保留完整工程审查尚未完成的事实。仅抗弯不推导其他检查通过。
 
-当前无Streamlit、OCR自动化、跨进程任务恢复或正式人工/通用模型批量实验；这些是已明确暂缓的后续路线。原教学模式、原Demo及其回归保持可用。
+当前无Streamlit、OCR自动化、跨进程任务恢复或正式人工/通用模型批量实验；这些是已明确暂缓的后续路线。这段是当时交付记录；旧教学模式与原Demo已于2026-11-02移除，当前验证见[CN单体系迁移](cn_only_migration.md)。

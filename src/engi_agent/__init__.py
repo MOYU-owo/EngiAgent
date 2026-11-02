@@ -1,6 +1,4 @@
-"""EngiAgent: a minimal engineering AI agent skeleton."""
+"""EngiAgent: Chinese-code reinforced-concrete beam workflows."""
 
-from engi_agent.agent import EngiAgent
-
-__all__ = ["EngiAgent"]
-__version__ = "0.1.0"
+__all__ = []
+__version__ = "0.2.0"

@@ -4,7 +4,7 @@ from pathlib import Path
 from langchain_deepseek import ChatDeepSeek
 from engi_agent.config import Settings
 from engi_agent.engineering.consultation import DeepSeekConsultant
-from engi_agent.engineering.workflow import prepare,confirm,run_engineering
+from engi_agent.engineering.cn_workflow import prepare,confirm,run_engineering
 from engi_agent.engineering.roles import ProgramRoles
 from engi_agent.ui.service import WorkbenchSession,load_case
 

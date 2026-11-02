@@ -1,14 +1,20 @@
 """Confirmed-input workflow, DAG execution/cache and bounded design revisions."""
+from __future__ import annotations
+
 import hashlib
 import json
+import math
+import re
+from typing import Callable
 from pydantic import TypeAdapter
 from langgraph.graph import StateGraph, START, END
-from .schema import (EngineeringState, EvaluationResult, ParameterValue, ProgressEvent,
+from .roles import RoleClient
+from .cn_schema import (EngineeringState, EvaluationResult, ParameterValue, ProgressEvent,
                      TaskRequest, ToolResult, FACTORS, parameter_python)
 from .cn_schema import CNParameters, CNProfile, CN_UNITS, CN_INTEGERS, cn_required
 from .dependency_graph import SPECS, TARGET_TOOLS, build_plan, dependencies
 from . import cn_tools
-from .tools import EngineeringFailure
+from .errors import EngineeringFailure
 from .cn_outputs import validate_output
 
 ALL_TARGETS = ['flexure', 'shear', 'detailing', 'crack', 'deflection']
@@ -29,13 +35,17 @@ REFS={
 }
 
 
-def normalize_cn(request):
+def normalize(request: TaskRequest) -> TaskRequest:
     request = TaskRequest.model_validate(request.model_dump()).model_copy(deep=True)
     extra_units = {'kN·m': {'kN·m': 1, 'kN*m': 1, 'N·mm': 1e-6}, 'kN': {'kN': 1, 'N': .001}}
     for key, item in request.parameters.items():
         if key not in CN_UNITS: raise ValueError(f'中国规范模式未知参数：{key}')
         item.raw_value = item.value if item.raw_value is None else item.raw_value
         item.raw_unit = item.unit if item.raw_unit is None else item.raw_unit
+        if key == 'deflection_limit_ratio' and isinstance(item.value, str):
+            ratio = re.fullmatch(r'[Ll]\s*/\s*(\d+(?:\.\d+)?)', item.value.strip())
+            if ratio:
+                item.value = float(ratio.group(1))
         if key=='safety_class' and item.value=='二级': item.value='2'
         if key=='environment_class' and item.value in ('一类','Ⅰ'): item.value='I'
         unit = CN_UNITS[key]
@@ -49,23 +59,32 @@ def normalize_cn(request):
         if key in CN_INTEGERS:
             if float(item.value) != int(float(item.value)): raise ValueError(f'{key}必须为整数')
             item.value = str(int(float(item.value)))
-        TypeAdapter(CNParameters.model_fields[key].rebuild_annotation()).validate_python(parameter_python(key, item))
+        value = TypeAdapter(CNParameters.model_fields[key].rebuild_annotation()).validate_python(parameter_python(key, item))
+        if isinstance(value, (int, float)) and not math.isfinite(value):
+            raise ValueError(f'{key}必须为有限数值')
     if request.task_type == 'new_design': request.targets = ALL_TARGETS.copy()
-    if set(request.targets)-set(ALL_TARGETS): raise ValueError('中国规范模式不使用教学弹性挠度目标，请用deflection')
+    if set(request.targets)-set(ALL_TARGETS): raise ValueError('验算目标超出中国规范支持范围')
     return request
 
 
-def prepare_cn(request, profile=None):
+def prepare(request, profile=None):
     if profile is not None and not isinstance(profile,CNProfile):
-        raise ValueError('中国规范任务不能使用教学计算配置')
-    r = normalize_cn(request)
+        raise ValueError('任务必须使用CN计算配置')
+    if profile is not None:
+        profile = CNProfile.model_validate(profile.model_dump())
+    if request.task_type == 'unsupported':
+        request = TaskRequest.model_validate(request.model_dump())
+        return EngineeringState(request=request, profile=profile or CNProfile(),
+                                errors=['不支持的结构、荷载或规范体系'])
+    r = normalize(request)
     return EngineeringState(request=r, profile=profile or CNProfile(),
                             missing_parameters=sorted(cn_required(r)-r.parameters.keys()))
 
 
-def confirm_cn(state):
-    from .workflow import stamp
-    fresh = prepare_cn(state.request, state.profile)
+def confirm(state):
+    fresh = prepare(state.request, state.profile)
+    if fresh.request.task_type == 'unsupported':
+        raise ValueError('超出支持范围的任务不能确认或计算')
     if fresh.missing_parameters: raise ValueError('缺少参数：'+','.join(fresh.missing_parameters))
     if fresh.request.task_type == 'new_design' and any(k in fresh.request.parameters for k in ('design_moment_kn_m', 'design_shear_kn')):
         raise ValueError('新设计须由确认的恒活载计算内力；直接内力仅用于已有梁验算')
@@ -83,7 +102,6 @@ def confirm_cn(state):
 
 def revise(state, changes, *, targets=None):
     """Create an unconfirmed revision; caller must confirm again before execution."""
-    if state.request.code != 'cn-2024': raise ValueError('局部重算接口当前仅支持中国规范模式')
     revised = state.model_copy(deep=True)
     for key, raw in changes.items():
         item = raw if isinstance(raw, ParameterValue) else ParameterValue.model_validate(raw)
@@ -100,7 +118,7 @@ def revise(state, changes, *, targets=None):
 
 
 def confirm_preparation(state):
-    fresh = prepare_cn(state.request, state.profile)
+    fresh = prepare(state.request, state.profile)
     fresh.cache, fresh.revisions = state.cache, state.revisions
     fresh.design_revision = state.design_revision
     fresh.revision_reason = state.revision_reason
@@ -108,7 +126,6 @@ def confirm_preparation(state):
 
 
 def _run_plan(state, params, phase, roles, on_event):
-    from .workflow import emit_progress, invoke_role
     design = phase == 'design'
     targets = ['flexure', 'shear'] if design else state.request.targets
     plan = build_plan(targets, params, design=design)
@@ -161,13 +178,21 @@ def _run_plan(state, params, phase, roles, on_event):
     return good
 
 
-def run_cn(state, roles, on_event=None):
-    from .workflow import stamp, error_state
+def run_engineering(state, roles, on_event=None):
     state = state.model_copy(deep=True)
     def reject(message):
         state.tool_results={};state.candidate={};state.execution_plan=[];state.plan_trace=[]
         state.evaluation=EvaluationResult(status='error')
         return error_state(state,message)
+    try:
+        TaskRequest.model_validate(state.request.model_dump())
+        CNProfile.model_validate(state.profile.model_dump())
+    except ValueError:
+        return reject('任务不符合CN规范契约，拒绝计算')
+    if state.request.task_type == 'unsupported':
+        state.tool_results = {}; state.candidate = {}; state.execution_plan = []; state.plan_trace = []
+        state.evaluation = EvaluationResult()
+        return state
     if not state.confirmed or not all(v.confirmed for v in state.request.parameters.values()) or state.confirmation_hash != stamp(state):
         return reject('参数或假设未确认，拒绝计算')
     if not isinstance(state.profile, CNProfile): return reject('中国规范任务与计算配置不匹配')
@@ -253,3 +278,60 @@ def run_cn(state, roles, on_event=None):
         return graph.compile().invoke({'state':state}, config={'recursion_limit':3*state.request.max_iterations+5})['state']
     except Exception as exc:
         return error_state(state, f'中国规范工作流异常（{type(exc).__name__}），未形成通过结论')
+
+
+ProgressCallback = Callable[[ProgressEvent], None]
+
+
+def emit_progress(state: EngineeringState, callback: ProgressCallback | None, event: ProgressEvent):
+    state.progress_events.append(event.model_copy(deep=True))
+    if callback:
+        try:
+            callback(event.model_copy(deep=True))
+        except Exception:
+            warning = "进度显示失败；计算记录仍已保存，请查看最终报告。"
+            if warning not in state.presentation_warnings:
+                state.presentation_warnings.append(warning)
+
+
+
+def values(state: EngineeringState) -> dict:
+    return {k: parameter_python(k, v) for k, v in state.request.parameters.items()}
+
+
+
+def stamp(state: EngineeringState) -> str:
+    payload = {"request": state.request.model_dump(), "profile": state.profile.model_dump()}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, allow_nan=False).encode()).hexdigest()
+
+
+
+def error_state(state: EngineeringState, message: str) -> EngineeringState:
+    state.errors.append(message)
+    state.evaluation = EvaluationResult(status="error")
+    return state
+
+
+
+def invoke_role(state: EngineeringState, roles: RoleClient, name: str, steps: list[str], on_event=None) -> bool:
+    phase = "design" if name == "Design" else "evaluation"
+    emit_progress(state, on_event, ProgressEvent(phase=phase, kind="planning", name=name,
+                                                status="running", total_steps=len(steps)))
+    try:
+        decision = roles.plan(name, {"required_steps": steps, "parameters": values(state),
+                                     "candidate": state.candidate, "profile": state.profile.model_dump()})
+        # Validate fake/custom provider responses, not just hosted model output.
+        from .roles import RolePlan
+        decision = RolePlan.model_validate(decision)
+        if decision.steps != steps:
+            raise ValueError("模型工具计划违反顺序或白名单")
+        state.role_events.append({"role": name, "status": "success", "steps": steps})
+        emit_progress(state, on_event, ProgressEvent(phase=phase, kind="planning", name=name,
+                                                    status="success", total_steps=len(steps)))
+        return True
+    except Exception as exc:
+        state.role_events.append({"role": name, "status": "error"})
+        error_state(state, f"{name} 模型调用或结构化输出失败（{type(exc).__name__}）")
+        emit_progress(state, on_event, ProgressEvent(phase=phase, kind="planning", name=name,
+                                                    status="failed", total_steps=len(steps)))
+        return False

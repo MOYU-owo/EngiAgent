@@ -4,7 +4,7 @@ import pytest
 
 from engi_agent.engineering.consultation import (
     consult, apply_proposal, basis_hash, ConsultationDecision, DeepSeekConsultant)
-from engi_agent.engineering.workflow import prepare, confirm, run_engineering
+from engi_agent.engineering.cn_workflow import prepare, confirm, run_engineering
 from engi_agent.engineering.roles import FixtureRoles
 from engi_agent.ui.service import WorkbenchSession, load_case
 

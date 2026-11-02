@@ -10,10 +10,10 @@ from uuid import uuid4
 
 from pydantic import Field, model_validator
 
-from .schema import Contract, EngineeringState, ParameterValue
+from .cn_schema import Contract, EngineeringState, ParameterValue
 from .cn_schema import CN_UNITS, CNParameters
 from .cn_presentation import LABELS, CN_FIELDS
-from .presentation import FIELDS
+from .cn_presentation import FIELDS
 from .dependency_graph import TARGET_TOOLS
 from .cn_workflow import revise
 

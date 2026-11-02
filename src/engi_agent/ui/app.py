@@ -5,14 +5,14 @@ import json
 import streamlit as st
 import pandas as pd
 
-from engi_agent.engineering.schema import TaskRequest, EngineeringState, parameter_python
+from engi_agent.engineering.cn_schema import TaskRequest, EngineeringState, parameter_python
 from engi_agent.engineering.cn_workflow import ALL_TARGETS
 from engi_agent.engineering.dependency_graph import TARGET_TOOLS, SPECS
 from engi_agent.engineering.cn_presentation import OUTPUTS
-from engi_agent.engineering.presentation import number
+from engi_agent.engineering.cn_presentation import number
 from .service import WorkbenchSession, CASES, ROOT, load_case
 from .projections import (STAGES, VERDICTS, ACTIONS, TOOL_STATUS, GROUPS, LABELS,
-                          editor_rows, audit_rows, result_rows, snapshot, dag_nodes, revision_comparison, output_rows,input_rows)
+                          editor_rows, audit_rows, result_rows, dag_nodes, revision_comparison, output_rows,input_rows)
 from .diagrams import beam_svg, dag_dot, agent_dot
 from .formulas import FORMULAS, NOTES
 
@@ -477,8 +477,6 @@ def experiments():
         st.info('正式对照实验未执行')
         st.dataframe([{'执行组':label,'状态':'未执行','结果证据':'尚未提供'} for label in ('人工设计','通用 LLM','固定 Python 流程','EngiAgent 对照组')],hide_index=True,width='stretch')
         st.caption('已有工程演示不冒充标准化对照实验；不生成准确率、耗时或token统计。')
-        with st.expander('预留数据接口 · ExperimentRecord'):
-            st.code('case_id, group, code_version, evidence, status\nelapsed_seconds: float | None\ntokens: int | None\ncost: float | None',language='python')
         st.markdown((ROOT/'docs/cn_experiment_protocol.md').read_text(encoding='utf-8'))
 
 

@@ -2,7 +2,7 @@
 
 本文为CLI操作说明。网页入口见 [可视化工作台使用说明](ui_quickstart.md)。
 
-本轮新增功能：按中国规范计算RC简支梁、已有梁独立验算、裂缝与长期挠度、按目标选择工具、当前进程内修改参数并局部重算、有限改设。原教学版与Demo仍可使用。
+本轮新增功能：按中国规范计算RC简支梁、已有梁独立验算、裂缝与长期挠度、按目标选择工具、当前进程内修改参数并局部重算、有限改设。2026-11-02起仅保留CN；旧教学版与Demo已移除。省略`code`仍默认中国规范。
 
 ## 1. 先跑一个完整案例
 
@@ -11,7 +11,7 @@
 ```powershell
 cd E:\code\Engiagent
 conda activate engiagent
-python run.py --engineering --offline --request examples/engineering/cn_design.json
+python run.py --offline --request examples/engineering/cn_design.json
 ```
 
 屏幕首先显示参数确认表。输入 **确认** 后开始；也可以先输入 `修改 梁高 600 mm` 再确认。
@@ -27,7 +27,7 @@ python run.py --engineering --offline --request examples/engineering/cn_design.j
 使用显式案例模板，可以避免每次重新输入材料和全部构造条件。模型仅提取这次自然语言中的值，程序合并模板后展示全部参数，仍需你确认。
 
 ```powershell
-python run.py --engineering --base-request examples/engineering/cn_design.json --query "按中国规范新设计一根梁，跨度6m，梁宽300mm，梁高550mm，恒载10kN/m不含自重，活载5kN/m，其余采用指定模板。"
+python run.py --base-request examples/engineering/cn_design.json --query "按中国规范新设计一根梁，跨度6m，梁宽300mm，梁高550mm，恒载10kN/m不含自重，活载5kN/m，其余采用指定模板。"
 ```
 
 确认表中的“显式案例模板”是你选择的模板参数，“模型提取”是本次自然语言提取值。这里不从自然语言猜测缺少的工程条件。也可以不提供模板，输入完整需求；完整自然语言范例见 `examples/smoke_cn_engineering.py` 中的QUERY。
@@ -35,13 +35,13 @@ python run.py --engineering --base-request examples/engineering/cn_design.json -
 若只想测试真实Design和Evaluation角色、直接使用参数文件：
 
 ```powershell
-python run.py --engineering --request examples/engineering/cn_design.json
+python run.py --request examples/engineering/cn_design.json
 ```
 
 ## 3. 已有梁独立验算
 
 ```powershell
-python run.py --engineering --offline --request examples/engineering/cn_existing.json
+python run.py --offline --request examples/engineering/cn_existing.json
 ```
 
 该文件已给出300×550mm、下部3Φ20及跨内双肢Φ8@250，程序只执行Evaluation，不生成新设计。实际工程请先编辑文件或在确认表更正输入。
@@ -49,19 +49,19 @@ python run.py --engineering --offline --request examples/engineering/cn_existing
 仅抗弯示例已直接给出100kN·m设计弯矩，省略荷载组合、受剪、裂缝和挠度：
 
 ```powershell
-python run.py --engineering --offline --request examples/engineering/cn_flexure_only.json
+python run.py --offline --request examples/engineering/cn_flexure_only.json
 ```
 
 真实模型解析局部验算可用：
 
 ```powershell
-python run.py --engineering --base-request examples/engineering/cn_existing.json --query "按中国规范验算已有梁，只检查抗弯，设计弯矩100kN·m，下部3根直径20mm钢筋，其余采用指定模板。"
+python run.py --base-request examples/engineering/cn_existing.json --query "按中国规范验算已有梁，只检查抗弯，设计弯矩100kN·m，下部3根直径20mm钢筋，其余采用指定模板。"
 ```
 
 ## 4. 同一进程修改与局部重算
 
 ```powershell
-python run.py --engineering --offline --request examples/engineering/cn_existing.json --session
+python run.py --offline --request examples/engineering/cn_existing.json --session
 ```
 
 先输入 `确认`；得到报告后输入 `修改 梁高 600 mm`，检查新表格并再次 `确认`。输入 `quit` 结束。
@@ -73,7 +73,7 @@ python run.py --engineering --offline --request examples/engineering/cn_existing
 ## 5. 有限改设
 
 ```powershell
-python run.py --engineering --offline --request examples/engineering/cn_redesign.json
+python run.py --offline --request examples/engineering/cn_redesign.json
 ```
 
 这个案例把挠度限值收紧到L/600。预期首轮3Φ20挠度不通过，第二轮4Φ20通过，固定的截面尺寸不变。最多3轮，历史方案写入报告及JSON。

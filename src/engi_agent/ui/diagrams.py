@@ -1,7 +1,6 @@
 """Data-driven SVG/DOT drawings. Geometry conversion only, no engineering checks."""
 import html
 import json
-from .projections import LABELS
 
 
 def fmt(value):

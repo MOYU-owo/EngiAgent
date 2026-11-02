@@ -3,9 +3,9 @@ import json
 from pathlib import Path
 from xml.etree import ElementTree
 import pytest
-from engi_agent.engineering.schema import TaskRequest
+from engi_agent.engineering.cn_schema import TaskRequest
 from engi_agent.engineering.roles import FixtureRoles
-from engi_agent.ui.service import WorkbenchSession, load_case, CASES, ROOT
+from engi_agent.ui.service import WorkbenchSession, load_case, CASES
 from engi_agent.ui.projections import (GROUPS,editor_rows,result_rows,dag_nodes,revision_comparison)
 from engi_agent.ui.diagrams import beam_svg,dag_dot,agent_dot
 

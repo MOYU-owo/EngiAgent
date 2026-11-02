@@ -1,6 +1,5 @@
 """Small explicit engineering DAG. Functions, dependencies and inputs are whitelisted."""
 from dataclasses import dataclass
-from typing import Callable
 
 
 @dataclass(frozen=True)

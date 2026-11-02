@@ -3,9 +3,9 @@ import json
 import math
 from pathlib import Path
 from engi_agent.engineering.roles import DeepSeekRoles
-from engi_agent.engineering.schema import TaskRequest
-from engi_agent.engineering.workflow import prepare,confirm,run_engineering
-from engi_agent.engineering.reporting import save_reports
+from engi_agent.engineering.cn_schema import TaskRequest
+from engi_agent.engineering.cn_workflow import prepare,confirm,run_engineering
+from engi_agent.engineering.cn_presentation import save_reports
 
 QUERY='''按中国规范cn-2024新设计一根普通房屋钢筋混凝土梁：单跨理想简支、矩形、单层受拉纵筋、全跨均布恒活载。
 计算跨度6m，梁宽300mm，梁高550mm，支座宽1000mm。净保护层30mm，最大骨料20mm。

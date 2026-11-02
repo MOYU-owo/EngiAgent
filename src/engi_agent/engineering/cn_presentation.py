@@ -1,15 +1,43 @@
-"""Chinese views of recorded values; no numerical design decisions in this module."""
-from .presentation import table, number, parameter_rows, PARAMETER_HEADERS, FIELDS, FIELD_ALIASES, SOURCES
+"""Deterministic Chinese engineering views shared by terminal and Markdown.
 
-SOURCES['template']='显式案例模板'
+Formatting is display-only: full precision remains in state/JSON and checks are
+never recomputed from rounded display values.
+"""
+from __future__ import annotations
 
-LABELS = {
-    'materials':'材料参数', 'section_sizing':'截面初选', 'section_geometry':'实际钢筋几何',
-    'load_combination':'作用组合', 'beam_analysis':'简支梁内力', 'demand':'设计内力来源',
-    'flexural_design':'受弯配筋', 'shear_design':'受剪配箍', 'flexural_check':'独立抗弯验算',
-    'shear_check':'独立抗剪验算', 'detailing_check':'适用构造核查', 'crack_check':'裂缝验算',
-    'deflection_check':'长期挠度验算', 'flexure':'抗弯', 'shear':'抗剪', 'detailing':'适用构造',
-    'crack':'裂缝', 'deflection':'长期挠度',
+from pathlib import Path
+from uuid import uuid4
+from .cn_schema import EngineeringState
+from decimal import Decimal, ROUND_HALF_UP
+import re
+import unicodedata
+from .cn_schema import ProgressEvent
+
+
+# Insertion order is the stable row order used for numbered CLI edits.
+FIELDS = {
+    "support_type": ("支承形式", "基本条件"),
+    "section_type": ("截面形式", "基本条件"),
+    "load_case": ("荷载形式", "基本条件"),
+    "span_mm": ("跨度", "几何"),
+    "beam_width_mm": ("梁宽", "几何"),
+    "beam_depth_mm": ("梁高", "几何"),
+    "max_width_mm": ("最大梁宽", "几何约束"),
+    "max_depth_mm": ("最大梁高", "几何约束"),
+    "cover_mm": ("净保护层", "几何"),
+    "concrete_unit_weight_kn_m3": ("混凝土容重", "材料"),
+    "bar_diameter_mm": ("纵筋直径", "纵筋"),
+    "bar_count": ("纵筋根数", "纵筋"),
+    "reinforcement_layers": ("受拉纵筋层数", "纵筋"),
+    "stirrup_diameter_mm": ("箍筋直径", "箍筋"),
+    "stirrup_legs": ("箍筋肢数", "箍筋"),
+    "stirrup_spacing_mm": ("箍筋间距", "箍筋"),
+    "aggregate_size_mm": ("最大骨料粒径", "布置"),
+    "dead_load_kn_m": ("输入恒载", "荷载"),
+    "live_load_kn_m": ("活载", "荷载"),
+    "self_weight_mode": ("自重约定", "荷载"),
+    "shear_position_mm": ("剪力查询位置", "分析"),
+    "deflection_limit_ratio": ("挠度限值分母", "正常使用"),
 }
 CN_FIELDS = {
     'concrete_grade':'混凝土等级', 'steel_grade':'纵筋牌号', 'stirrup_grade':'箍筋牌号',
@@ -22,9 +50,175 @@ CN_FIELDS = {
     'top_bar_count':'架立筋根数', 'side_bar_diameter_mm':'腰筋直径',
     'side_bar_count_per_face':'每侧腰筋根数', 'side_bar_spacing_mm':'腰筋间距', 'support_width_mm':'支座宽度',
 }
-for key,label in CN_FIELDS.items():
-    FIELDS.setdefault(key,(label,'中国规范参数'))
-    FIELD_ALIASES.setdefault(label,key)
+for key, label in CN_FIELDS.items():
+    FIELDS[key] = (label, '中国规范参数')
+
+FIELD_ALIASES = {label: key for key, (label, _) in FIELDS.items()}
+FIELD_ALIASES.update({"梁跨度": "span_mm", "保护层": "cover_mm", "钢筋根数": "bar_count"})
+FIELD_ALIASES.update({"恒载": "dead_load_kn_m", "活荷载": "live_load_kn_m"})
+ENUMS = {
+    "simply_supported": "简支", "rectangular": "矩形", "full_span_udl": "全跨均布",
+    "included": "输入恒载已含自重，不重复计入",
+    "excluded": "输入恒载不含自重，程序另行计入",
+}
+ENUM_INPUTS = {"简支": "simply_supported", "矩形": "rectangular", "全跨均布": "full_span_udl",
+               "已含自重": "included", "另计自重": "excluded"}
+SOURCES = {"user": "用户/任务文件", "llm_extracted": "模型提取", "tool": "计算工具",
+           "derived": "推导", "default_confirmed": "已确认假设", "template": "显式案例模板"}
+TARGETS = {"flexure": "抗弯", "shear": "抗剪", "detailing": "适用构造", "crack": "裂缝", "deflection": "长期挠度"}
+TOOLS = {"materials": "材料参数", "section_sizing": "截面初选", "section_geometry": "实际钢筋几何",
+         "load_combination": "作用组合", "beam_analysis": "简支梁内力", "demand": "设计内力来源",
+         "flexural_design": "受弯配筋", "shear_design": "受剪配箍", "flexural_check": "独立抗弯验算",
+         "shear_check": "独立抗剪验算", "detailing_check": "适用构造核查", "crack_check": "裂缝验算",
+         "deflection_check": "长期挠度验算"}
+PHASES = {"design": "设计", "evaluation": "独立验算"}
+UNITS = {"mm2": "mm²", "kN/m3": "kN/m³"}
+
+
+def plain(value) -> str:
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", str(value))
+    return "".join(" " if unicodedata.category(c).startswith("C") else c for c in text)
+
+
+def number(value, decimals=2) -> str:
+    if value is None:
+        return "—"
+    if isinstance(value, bool):
+        return "是" if value else "否"
+    if not isinstance(value, (int, float)):
+        return plain(value)
+    if value == 0:
+        return "0"
+    if abs(value) < 0.01 or abs(value) >= 1e18:
+        return f"{value:.4g}"
+    # Remove binary float tails before display rounding (112.27499999999999 ->
+    # 112.275 -> 112.28). This never alters stored values or pass decisions.
+    rounded = Decimal(format(value, ".15g")).quantize(Decimal(1).scaleb(-decimals), rounding=ROUND_HALF_UP)
+    text = f"{rounded:,.{decimals}f}"
+    return text.rstrip("0").rstrip(".") if "." in text else text
+
+
+def quantity(value, unit="", decimals=2):
+    return number(value, decimals) + (" " + UNITS.get(unit, unit) if unit else "")
+
+
+def parameter_value(key, value, unit=None, raw=False):
+    if isinstance(value, str) and value in ENUMS:
+        return ENUMS[value]
+    if key in {"bar_count", "stirrup_legs", "reinforcement_layers"}:
+        return number(float(value))
+    if key == "deflection_limit_ratio":
+        if raw and isinstance(value, str) and re.fullmatch(r'[Ll]\s*/\s*\d+(?:\.\d+)?', value.strip()):
+            return plain(value)
+        return "L/" + number(value)
+    if raw and isinstance(value, (int, float)) and not isinstance(value, bool):
+        return format(value, ".15g") + (" " + UNITS.get(unit, unit) if unit else "")
+    return quantity(value, unit or "")
+
+
+def field_label(key):
+    return FIELDS.get(key, (key, "其他"))[0]
+
+
+def friendly_message(text):
+    text = plain(text)
+    for phase, phase_name in PHASES.items():
+        for tool, label in TOOLS.items():
+            text = text.replace(phase + "." + tool, phase_name + "·" + label)
+    for tool, label in TOOLS.items():
+        text = text.replace(tool, label)
+    return text
+
+
+def parameter_keys(state):
+    keys = set(state.request.parameters) | set(state.missing_parameters)
+    if state.request.task_type == "new_design":
+        keys |= {"beam_width_mm", "beam_depth_mm", "bar_count", "stirrup_spacing_mm"}
+    return [key for key in FIELDS if key in keys] + sorted(keys - set(FIELDS))
+
+
+def parameter_rows(state):
+    rows = []
+    for index, key in enumerate(parameter_keys(state), 1):
+        item = state.request.parameters.get(key)
+        group = FIELDS.get(key, (key, "其他"))[1]
+        if item:
+            raw = parameter_value(key, item.raw_value if item.raw_value is not None else item.value,
+                                  item.raw_unit if item.raw_unit is not None else item.unit, raw=True)
+            rows.append([str(index), group, field_label(key), raw,
+                         parameter_value(key, item.value, item.unit), SOURCES.get(item.source, item.source),
+                         "已确认" if item.confirmed else "待确认"])
+        else:
+            missing = key in state.missing_parameters
+            derived = state.candidate.get(key)
+            if derived is None:
+                for tool in ("section_sizing", "flexural_design", "shear_design"):
+                    result = state.tool_results.get("design." + tool)
+                    if result and result.status == "success" and key in result.outputs:
+                        derived = result.outputs[key]
+                        break
+            text = "缺失，需补充" if missing else "由设计工具确定"
+            status = "缺失" if missing else "待计算"
+            if derived is not None and not missing:
+                text = parameter_value(key, derived, "mm" if key.endswith("_mm") else None)
+                status = "已计算"
+            rows.append([str(index), group, field_label(key), "—", text, "用户需提供" if missing else "计算工具", status])
+    return rows
+
+
+def table(headers, rows, markdown=False):
+    rows = [[plain(c) for c in row] for row in rows]
+    headers = [plain(c) for c in headers]
+    if markdown:
+        def cell(c):
+            return c.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("|", "\\|")
+        return "\n".join(["| " + " | ".join(map(cell, headers)) + " |",
+                          "| " + " | ".join("---" for _ in headers) + " |"] +
+                         ["| " + " | ".join(map(cell, row)) + " |" for row in rows])
+    def width(s):
+        return sum(0 if unicodedata.combining(c) else 2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in s)
+    widths = [min(24, max(width(row[i]) for row in [headers] + rows)) for i in range(len(headers))]
+    def line(row):
+        return " | ".join(s + " " * (w - width(s)) for s, w in zip(row, widths))
+    def wrap(cell, limit):
+        parts, current = [], ""
+        for character in cell:
+            if current and width(current + character) > limit:
+                parts.append(current)
+                current = ""
+            current += character
+        return parts + [current]
+    def wrapped_lines(row):
+        cells = [wrap(cell, limit) for cell, limit in zip(row, widths)]
+        return [line([cell[i] if i < len(cell) else "" for cell in cells])
+                for i in range(max(map(len, cells)))]
+    rendered = wrapped_lines(headers) + ["-+-".join("-" * w for w in widths)]
+    for row in rows:
+        rendered += wrapped_lines(row)
+    return "\n".join(rendered)
+
+
+PARAMETER_HEADERS = ["编号", "类别", "参数", "提取值/输入值", "计算采用值", "来源", "状态"]
+
+
+def progress_text(event: ProgressEvent) -> str:
+    phase = PHASES[event.phase]
+    label = TOOLS.get(event.name, event.name)
+    if event.kind == "planning":
+        return f"[{phase}计划] " + {"running": "正在组织工具…", "success": "计划已校验", "failed": "计划失败"}.get(event.status, event.status)
+    status = {"running": "执行中", "success": "完成", "failed": "执行失败", "blocked": "上游阻断"}[event.status]
+    checked = event.outputs.get("pass")
+    if checked is not None and event.status == "success":
+        status += "；验算通过" if checked else "；验算不通过"
+    key = next((k for k in ("capacity_kn_m", "capacity_kn", "crack_width_mm", "deflection_mm", "bar_count", "stirrup_spacing_mm") if k in event.outputs), None)
+    if key:
+        status += "；" + OUTPUTS[key] + "=" + number(event.outputs[key], 3)
+    notes = "；".join(friendly_message(e) for e in event.errors + event.warnings)
+    return f"[{phase} {event.step}/{event.total_steps}] {label}：{status}" + ("；" + notes if notes else "")
+
+
+
+LABELS = {**TOOLS, **TARGETS}
 
 OUTPUTS = {
     'beam_width_mm':'梁宽/mm', 'beam_depth_mm':'梁高/mm', 'effective_depth_mm':'有效高度/mm',
@@ -137,7 +331,8 @@ def markdown_report(state, json_filename=None):
         revision_rows.append([str(r['revision']),str(r['iteration']),reason,scheme,STATUS[r['evaluation']['status']]])
     lines += [table(['修订','本次轮次','修改原因','候选方案','结果'],revision_rows,markdown=True)]
     lines += ['','## 未覆盖项与停止原因','']
-    lines += ['- '+LABELS.get(x.split('：')[-1],x) if x.startswith('本次未请求：') else '- '+x for x in state.evaluation.unimplemented]
+    lines += ['- 本次未请求：'+LABELS.get(x.split('：',1)[1],x.split('：',1)[1])
+              if x.startswith('本次未请求：') else '- '+x for x in state.evaluation.unimplemented]
     lines += ['- '+e for e in state.errors]
     lines += ['','## 公式与输入追溯','',table(['工具','公式版本','输入哈希'],
         [[k,r.formula_version,r.inputs_hash] for k,r in state.tool_results.items()],markdown=True),'',
@@ -147,3 +342,13 @@ def markdown_report(state, json_filename=None):
 
 def ALL_LABELS():
     return {**LABELS,**{k:v[0] for k,v in FIELDS.items()}}
+
+
+def save_reports(state: EngineeringState, directory: str | Path) -> tuple[Path, Path]:
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    stem = "beam_" + uuid4().hex[:12]
+    md, data = directory / (stem + ".md"), directory / (stem + ".json")
+    md.write_text(markdown_report(state, data.name), encoding="utf-8")
+    data.write_text(state.model_dump_json(indent=2), encoding="utf-8")
+    return md.resolve(), data.resolve()

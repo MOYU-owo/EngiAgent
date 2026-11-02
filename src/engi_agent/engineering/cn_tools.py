@@ -3,7 +3,7 @@
 Formula contract and applicability: docs/rc_beam_cn_design_spec.md.
 """
 import math
-from .tools import EngineeringFailure
+from .errors import EngineeringFailure
 
 # GB/T50010 tables 4.1.3/4.1.4/4.1.5; unchanged rows C25-C50.
 CONCRETE = {

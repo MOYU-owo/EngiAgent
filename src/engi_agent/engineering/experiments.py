@@ -2,15 +2,14 @@
 from collections import Counter
 from datetime import datetime, timezone
 import hashlib
-import json
 import platform
 from pathlib import Path
 from statistics import median
 from time import perf_counter
 
-from .schema import TaskRequest, ParameterValue
+from .cn_schema import TaskRequest, ParameterValue
 from .roles import ProgramRoles
-from .workflow import prepare, confirm, run_engineering
+from .cn_workflow import prepare, confirm, run_engineering
 from .cn_workflow import ALL_TARGETS, revise
 from .dependency_graph import TARGET_TOOLS
 
@@ -73,7 +72,7 @@ def run_mechanism_experiment(repeats=3):
             'max_wall_seconds':max(r['elapsed_wall_seconds'] for r in values)})
     sources={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()
              for p in [Path(__file__), *(Path(__file__).parent/name for name in
-                        ('cn_tools.py','cn_workflow.py','dependency_graph.py','cn_schema.py','roles.py','workflow.py')),
+                        ('cn_tools.py','cn_workflow.py','dependency_graph.py','cn_schema.py','roles.py')),
                         ROOT/'examples/engineering/cn_existing.json']}
     return {'schema_version':1,'kind':'same_kernel_mechanism_ablation','completed_at_utc':datetime.now(timezone.utc).isoformat(),
             'python':platform.python_version(),'platform':platform.platform(),'source_hashes':sources,

@@ -1,6 +1,8 @@
 """Input boundary for the deliberately small Chinese-code beam implementation."""
-from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from __future__ import annotations
+
+from typing import Any, Literal
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class Contract(BaseModel):
@@ -102,3 +104,104 @@ def cn_required(request):
     if 'deflection' in targets:
         basic.add('deflection_limit_ratio')
     return basic
+
+
+class ParameterValue(Contract):
+    value: float | str | bool
+    unit: str | None = None
+    source: Literal["user", "llm_extracted", "tool", "derived", "default_confirmed", "template"] = "user"
+    confirmed: bool = False
+    raw_value: float | str | bool | None = None
+    raw_unit: str | None = None
+    revision: int = 1
+
+
+Target = Literal["flexure", "shear", "detailing", "crack", "deflection"]
+
+
+class TaskRequest(Contract):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False, validate_assignment=True)
+    code: Literal["cn-2024"] = "cn-2024"
+    auto_redesign: bool = False
+    max_iterations: int = Field(default=3, ge=1, le=10)
+    task_type: Literal["new_design", "evaluate_existing", "unsupported"]
+    parameters: dict[str, ParameterValue] = Field(default_factory=dict)
+    targets: list[Target] = Field(default_factory=lambda: ["flexure", "shear", "detailing", "crack", "deflection"])
+    user_query: str = ""
+    clarification: list[str] = Field(default_factory=list)
+
+    @field_validator("targets")
+    @classmethod
+    def targets_not_empty(cls, value):
+        if not value or len(value) != len(set(value)):
+            raise ValueError("验算目标不能为空或重复")
+        return value
+
+
+# Supported input units are normalized before CN parameter validation.
+FACTORS = {
+    "mm": {"mm": 1, "m": 1000, "cm": 10},
+    "kN/m": {"kN/m": 1, "N/mm": 1, "N/m": 0.001},
+    "kN/m3": {"kN/m3": 1, "N/m3": 0.001},
+}
+
+
+def parameter_python(name: str, item: ParameterValue):
+    return int(item.value) if name in {"bar_count", "stirrup_legs", "reinforcement_layers", "design_life_years", "safety_class", "top_bar_count", "side_bar_count_per_face"} else item.value
+
+
+class ToolResult(Contract):
+    tool: str
+    status: Literal["success", "failed", "blocked"]
+    inputs_hash: str
+    inputs: dict[str, Any]
+    outputs: dict[str, Any] = Field(default_factory=dict)
+    code_refs: list[str] = Field(default_factory=lambda: ["docs/rc_beam_cn_design_spec.md"])
+    warnings: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+    revision: int = 1
+    formula_version: str = "cn-rc-2024-v1"
+
+
+class EvaluationResult(Contract):
+    status: Literal["pass", "fail", "incomplete", "error"] = "incomplete"
+    checks: dict[str, bool] = Field(default_factory=dict)
+    code_status: Literal["未完成", "已核验支持范围内项目"] = "未完成"
+    overall_status: Literal["incomplete", "pass", "fail", "error"] = "incomplete"
+    unimplemented: list[str] = Field(default_factory=lambda: ["尚未完成请求项目验算", "节点详图、施工与完整工程审查"])
+
+
+class ProgressEvent(Contract):
+    """Structured progress for terminal display and future UI consumers."""
+    phase: Literal["design", "evaluation"]
+    kind: Literal["planning", "tool"]
+    name: str
+    status: Literal["running", "success", "failed", "blocked"]
+    step: int = 0
+    total_steps: int = 0
+    outputs: dict[str, Any] = Field(default_factory=dict)
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+
+
+class EngineeringState(Contract):
+    request: TaskRequest
+    profile: CNProfile = Field(default_factory=CNProfile)
+    confirmed: bool = False
+    confirmation_hash: str | None = None
+    design_revision: int = 1
+    execution_plan: list[str] = Field(default_factory=list)
+    tool_results: dict[str, ToolResult] = Field(default_factory=dict)
+    candidate: dict[str, Any] = Field(default_factory=dict)
+    evaluation: EvaluationResult = Field(default_factory=EvaluationResult)
+    errors: list[str] = Field(default_factory=list)
+    role_events: list[dict[str, Any]] = Field(default_factory=list)
+    missing_parameters: list[str] = Field(default_factory=list)
+    progress_events: list[ProgressEvent] = Field(default_factory=list)
+    presentation_warnings: list[str] = Field(default_factory=list)
+    cache: dict[str, ToolResult] = Field(default_factory=dict)
+    plan_trace: list[dict[str, Any]] = Field(default_factory=list)
+    revisions: list[dict[str, Any]] = Field(default_factory=list)
+    revision_reason: str = '初始任务'

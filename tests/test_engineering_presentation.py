@@ -3,17 +3,18 @@ import json
 from pathlib import Path
 import pytest
 from engi_agent.engineering.cli import confirmation_text, edit_parameter, interactive_confirm, main
-from engi_agent.engineering.presentation import parameter_keys, parameter_rows, progress_text, result_overview, number
-from engi_agent.engineering.reporting import markdown_report, save_reports
+from engi_agent.engineering.cn_presentation import parameter_keys, parameter_rows, progress_text, number
+from engi_agent.engineering.cn_presentation import markdown_report, save_reports
 from engi_agent.engineering.roles import FixtureRoles
-from engi_agent.engineering.schema import TaskRequest, ParameterValue, EngineeringState
-from engi_agent.engineering.workflow import prepare, confirm, run_engineering
-from engi_agent.engineering.tools import REGISTRY
+from engi_agent.engineering.cn_schema import TaskRequest, ParameterValue, EngineeringState
+from engi_agent.engineering.cn_workflow import prepare, confirm, run_engineering
+from engi_agent.engineering.cn_tools import REGISTRY
+from engi_agent.engineering.cn_presentation import overview as result_overview
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def request(name="paper_normal"):
+def request(name="cn_design"):
     return TaskRequest.model_validate_json((ROOT / "examples/engineering" / (name + ".json")).read_text(encoding="utf-8"))
 
 
@@ -27,13 +28,14 @@ def test_confirmation_translates_labels_enum_sources_and_retains_original_precis
     assert all(word in text for word in ("参数", "来源", "待确认", "跨度", "简支", "全跨均布"))
     assert "span_mm" not in text and '"gamma_dead"' not in text
     rows = parameter_rows(state)
-    assert any(row[2] == "纵筋直径" and row[3] == "1.128 in" for row in rows)
+    assert any(row[2] == "纵筋直径" and row[3] == "20 mm" for row in rows)
     assert any(row[2] == "纵筋根数" and row[4] == "由设计工具确定" for row in rows)
     assert any(row[2] == "自重约定" and "另行计入" in row[4] for row in rows)
 
 
 def test_missing_required_and_computed_fields_are_distinct():
-    r = request("unsized_design")
+    r = request()
+    del r.parameters["beam_depth_mm"]
     del r.parameters["live_load_kn_m"]
     rows = parameter_rows(prepare(r))
     assert any(row[2] == "活载" and row[-1] == "缺失" for row in rows)
@@ -43,8 +45,8 @@ def test_missing_required_and_computed_fields_are_distinct():
 def test_completed_generated_parameters_show_calculated_in_report():
     state = run(request())
     rows = parameter_rows(state)
-    assert any(row[2] == "纵筋根数" and row[4] == "4" and row[-1] == "已计算" for row in rows)
-    assert any(row[2] == "箍筋间距" and row[4] == "220 mm" and row[-1] == "已计算" for row in rows)
+    assert any(row[2] == "纵筋根数" and row[4] == "3" and row[-1] == "已计算" for row in rows)
+    assert any(row[2] == "箍筋间距" and row[4] == "350 mm" and row[-1] == "已计算" for row in rows)
 
 
 def test_display_rounding_removes_binary_tail_but_preserves_small_strains():
@@ -81,23 +83,23 @@ def test_interactive_missing_field_can_be_filled_in_chinese():
     assert any("缺失" in message for message in messages)
 
 
-def test_progress_is_delivered_before_tool_execution_and_uses_real_results(monkeypatch):
+def test_progress_uses_actual_executed_tool_outputs(monkeypatch):
     seen = []
     original = REGISTRY["beam_analysis"]
     def checked(*args):
-        assert seen[-1].name == "beam_analysis" and seen[-1].status == "running"
+        assert sum(e.name == "beam_analysis" and e.kind == "tool" for e in seen) == len([e for e in seen if e.name == "Evaluation" and e.status == "running"])
         return original(*args)
     monkeypatch.setitem(REGISTRY, "beam_analysis", checked)
     state = run(request(), seen.append)
     assert state.evaluation.status == "pass"
     assert len(seen) == len(state.progress_events)
     tool_events = [e for e in seen if e.kind == "tool"]
-    assert [e.step for e in tool_events if e.phase == "design" and e.status == "success"] == list(range(1, 7))
+    assert [e.step for e in tool_events if e.phase == "design" and e.status == "success"] == list(range(1, 9))
     for event in tool_events:
         if event.status == "success":
             result = state.tool_results[f"{event.phase}.{event.name}"]
             assert event.outputs == result.outputs
-    assert "[设计 1/6]" in progress_text(tool_events[0])
+    assert "[设计 1/8]" in progress_text(tool_events[0])
 
 
 def test_observer_cannot_mutate_result_and_display_failure_does_not_change_engineering():
@@ -113,21 +115,23 @@ def test_observer_cannot_mutate_result_and_display_failure_does_not_change_engin
 
 def test_failed_check_is_not_displayed_as_execution_failure_or_overall_pass():
     seen = []
-    state = run(request("flexure_only"), seen.append)
+    r = request("cn_flexure_only")
+    r.parameters["design_moment_kn_m"] = ParameterValue(value=200, unit="kN·m")
+    state = run(r, seen.append)
     event = next(e for e in seen if e.name == "flexural_check" and e.status == "success")
     assert "不通过" in progress_text(event)
-    assert "折减后抗弯承载力" in progress_text(event)
+    assert "抗弯承载力" in progress_text(event)
     overview = result_overview(state)
-    assert "试算不通过" in overview and "抗弯承载力低于设计弯矩" in overview
+    assert "请求项目不通过" in overview and "抗弯：不通过" in overview
     assert all(e.phase == "evaluation" for e in seen)
 
 
-def test_blocked_descendants_and_absent_checks_are_not_claimed_to_pass():
-    state = run(request("unsized_design"))
+def test_blocked_descendants_are_recorded_and_not_claimed_to_pass():
+    r = request(); r.parameters["max_depth_mm"] = ParameterValue(value=400, unit="mm")
+    state = run(r)
     assert any(e.status == "blocked" for e in state.progress_events)
     text = markdown_report(state)
-    assert "未形成有效设计方案" in text and "上游阻断" in text
-    assert "未执行或被上游阻断；不能判断通过" in text
+    assert "上游阻断" in text and "请求项目通过" not in text
 
 
 def test_model_failure_shows_planning_failure_without_fake_tool_progress():
@@ -140,27 +144,27 @@ def test_model_failure_shows_planning_failure_without_fake_tool_progress():
     assert state.evaluation.status == "error"
     assert [e.status for e in seen] == ["running", "failed"]
     assert not any(e.kind == "tool" for e in seen)
-    assert "不能判断通过" in markdown_report(state)
+    assert "不能判定通过" in markdown_report(state)
 
 
 def test_report_is_engineering_tables_not_json_dump_and_json_keeps_full_precision(tmp_path):
     state = run(request())
     md, data = save_reports(state, tmp_path)
     text = md.read_text(encoding="utf-8")
-    assert "参数确认表" in text and "设计计算过程" in text and "独立验算过程" in text
-    assert "| 验算项目 | 需求/限值 | 能力/计算响应 | 结论 |" in text
+    assert "参数确认" in text and "分项计算过程" in text and "独立验算" in text
+    assert "| 检查项目 | 结果 | 关键数值 |" in text
     assert "```json" not in text
     assert data.name in text and "输入哈希" in text
     saved = json.loads(data.read_text(encoding="utf-8"))
     assert saved["candidate"]["As_mm2"] == state.candidate["As_mm2"]
     assert saved["progress_events"] and saved["evaluation"]["overall_status"] == "incomplete"
-    assert "305.48" in text and "305.482731483362" not in text
+    assert "156.9074" in text and str(state.tool_results["evaluation.flexural_check"].outputs["capacity_kn_m"]) not in text
 
 
 def test_existing_evaluation_report_displays_actual_scheme_instead_of_empty_candidate():
-    text = markdown_report(run(request("flexure_only")))
-    assert "已有方案" in text and "没有生成新设计方案" in text
-    assert "纵筋根数" in text and "跳过设计阶段" in text
+    text = markdown_report(run(request("cn_flexure_only")))
+    assert "已有梁独立验算" in text
+    assert "纵筋根数" in text and "设计 · 受弯配筋" not in text
     assert "本次未请求：抗剪" in text
 
 
@@ -170,13 +174,13 @@ def test_old_saved_states_without_progress_remain_readable():
     old.pop("presentation_warnings")
     state = EngineeringState.model_validate_json(json.dumps(old))
     assert not state.progress_events
-    assert "362.57" in markdown_report(state)
+    assert "156.9074" in markdown_report(state)
 
 
 def test_cli_uses_readable_progress_and_short_result_summary(tmp_path, capsys):
-    code = main(["--engineering", "--request", str(ROOT / "examples/engineering/paper_normal.json"),
+    code = main(["--request", str(ROOT / "examples/engineering/cn_design.json"),
                  "--offline", "--approve", "--output-dir", str(tmp_path)])
     text = capsys.readouterr().out
-    assert code == 0 and "[设计 1/6]" in text and "[验算 8/8]" in text
-    assert "结果总览" in text and "参数确认" in text
+    assert code == 0 and "[设计 1/8]" in text and "[独立验算 11/11]" in text
+    assert "计算状态：请求项目通过" in text and "参数确认" in text
     assert "```json" not in text and "输入哈希" not in text

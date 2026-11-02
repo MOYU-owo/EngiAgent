@@ -1,1 +1,1 @@
-"""Deterministic teaching RC beam engine, separate from the original demo."""
+"""Chinese-code RC beam design, evaluation and consultation."""

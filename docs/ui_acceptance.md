@@ -14,7 +14,7 @@
 |动态DAG|实际工具子图、真实upstream边、缓存/失效原因、阻断与错误；节点选择器查看记录|
 |修订比较|对应轮次的输入、候选、检查结论、重算/复用工具及原因|
 |导出|调用原内核Markdown报告和完整EngineeringState JSON；额外导出UI调用审计|
-|对照实验|统一预留ExperimentRecord接口及协议页，明确未执行，无虚构指标|
+|对照实验|保留正式实验协议页，明确未执行，无虚构指标；未使用的ExperimentRecord占位接口已清理|
 
 新增入口为streamlit_app.py；实现集中在src/engi_agent/ui。工程公式、规范判定、三个角色职责、依赖DAG与既有CLI调用未重构。适配层调用现有prepare/confirm/run_engineering/revise接口，未模拟CLI输入。
 

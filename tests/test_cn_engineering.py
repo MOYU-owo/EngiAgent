@@ -1,14 +1,13 @@
 """Code arithmetic, dependency integrity and independent evaluation boundaries."""
-import json
 import math
 from pathlib import Path
 import pytest
-from engi_agent.engineering.schema import TaskRequest, ParameterValue, EngineeringState
-from engi_agent.engineering.workflow import prepare, confirm, run_engineering
-from engi_agent.engineering.roles import FixtureRoles, RolePlan, DeepSeekRoles
+from engi_agent.engineering.cn_schema import TaskRequest, ParameterValue, EngineeringState
+from engi_agent.engineering.cn_workflow import prepare, confirm, run_engineering
+from engi_agent.engineering.roles import FixtureRoles
 from engi_agent.engineering.cn_workflow import revise
 from engi_agent.engineering import cn_tools
-from engi_agent.engineering.reporting import markdown_report
+from engi_agent.engineering.cn_presentation import markdown_report
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -219,7 +218,7 @@ def test_cn_cli_current_process_revision(tmp_path,monkeypatch,capsys):
     # interactive_confirm binds input at import time; replace that function's default too.
     from engi_agent.engineering import cli
     monkeypatch.setattr(cli.interactive_confirm,'__defaults__',(lambda _:next(answers),print))
-    result=main(['--engineering','--offline','--request',str(ROOT/'examples/engineering/cn_existing.json'),
+    result=main(['--offline','--request',str(ROOT/'examples/engineering/cn_existing.json'),
                  '--session','--output-dir',str(tmp_path)])
     assert result==0
     files=list(tmp_path.glob('*.json')); assert len(files)==2
@@ -248,10 +247,10 @@ def test_chinese_class_is_normalized_and_raw_value_retained():
     assert s.request.parameters['safety_class'].raw_value=='二级'
 
 
-def test_teaching_mode_rejects_cn_target_instead_of_empty_pass():
-    r=TaskRequest.model_validate_json((ROOT/'examples/engineering/metric_existing.json').read_text(encoding='utf-8'))
-    r.targets=['crack']
-    with pytest.raises(ValueError): prepare(r)
+def test_non_cn_task_code_rejected_before_any_calculation():
+    raw=request('cn_existing').model_dump()
+    raw['code']='teaching'
+    with pytest.raises(ValueError): TaskRequest.model_validate(raw)
 
 
 def test_only_flexure_does_not_require_unrelated_self_weight_fields():
@@ -272,7 +271,7 @@ def test_explicit_template_and_natural_query_entry(tmp_path,monkeypatch,capsys):
     from engi_agent.engineering import cli
     parsed=TaskRequest(code='cn-2024',task_type='new_design',parameters={'span_mm':ParameterValue(value=6,unit='m',source='llm_extracted')})
     monkeypatch.setattr(cli,'DeepSeekRoles',lambda:FixtureRoles(parsed))
-    result=cli.main(['--engineering','--base-request',str(ROOT/'examples/engineering/cn_design.json'),
+    result=cli.main(['--base-request',str(ROOT/'examples/engineering/cn_design.json'),
         '--query','按中国规范新设计一根梁，跨度6m，其余采用模板','--approve','--output-dir',str(tmp_path)])
     assert result==0
     s=EngineeringState.model_validate_json(next(tmp_path.glob('*.json')).read_text(encoding='utf-8'))

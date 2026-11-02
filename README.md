@@ -1,215 +1,76 @@
 # EngiAgent
 
-EngiAgent is an early MVP for a small, transparent engineering AI agent. The
-original demo demonstrates deterministic tool calling and multi-turn conversation.
-The engineering mode provides a Chinese CLI for teaching and Chinese-code RC
-beam design/evaluation, with three DeepSeek roles and validated Python tools.
+EngiAgent 是仅运行中国规范的钢筋混凝土梁设计、验算与咨询原型。2026-11-02 起移除了旧教学计算分支和通用 Agent Demo；所有入口默认 `cn-2024`，其他规范代码会被拒绝。
 
-## 专家咨询与真实机制对照（2026-10-27）
-
-新增专家咨询页：解释已有结果、提取有原文依据的参数修改，采用后重新确认并走实际验算与局部重算。
-新增“DeepSeek · 仅需求与咨询”模式，设计/验算直接按工程DAG执行；保留原全模型模式。
-对照实验页可实际运行20种组合的全量/DAG/缓存机制对照并导出数据。
-
-[使用与验证记录](docs/consultation_delivery.md)。本轮新服务端口8512；8511若仍运行旧服务，可使用 `python -m streamlit run streamlit_app.py --server.port 8512`。
-
-## 可视化工作台（2026-10-26）
+## 启动工作台
 
 ```powershell
 conda activate engiagent
-python -m pip install -e ".[ui]"
-python -m streamlit run streamlit_app.py --server.port 8511
+python -m pip install -e ".[dev,ui]"
+python -m streamlit run streamlit_app.py --server.port 8512 --server.address 127.0.0.1
 ```
 
-打开 http://127.0.0.1:8511 。提供参数确认、真实计算、二维梁示意、LaTeX规范复核、Agent调用记录、工程DAG和修订比较；对照实验页明确为未执行。
+打开 <http://127.0.0.1:8512>。加载案例，检查参数并确认后运行。工作台提供设计、规范复核、工具 DAG、修订比较、专家咨询和可执行机制对照实验。
 
-[网页使用说明](docs/ui_quickstart.md) · [界面设计与字段映射](docs/ui_design_spec.md) · [实际验收记录与截图](docs/ui_acceptance.md)
+执行模式包括离线确定性角色、真实 DeepSeek 角色、以及“DeepSeek · 仅需求与咨询”。这三种模式均使用同一套 CN 参数、公式和工具；区别是哪些环节调用模型。
 
-## 中国规范版快速开始（2026-10-25）
+## 命令行
 
 ```powershell
-conda activate engiagent
-python run.py --engineering --offline --request examples/engineering/cn_design.json
+# 显示参数表，输入“确认”后计算
+python run.py --offline --request examples/engineering/cn_design.json
+
+# 已有梁独立验算；可在同一进程修改并重新确认
+python run.py --offline --request examples/engineering/cn_existing.json --session
+
+# 仅抗弯、有限改设、达到上限停止
+python run.py --offline --request examples/engineering/cn_flexure_only.json
+python run.py --offline --request examples/engineering/cn_redesign.json
+python run.py --offline --request examples/engineering/cn_no_solution.json
+
+# 批量运行：显式确认文件参数和规范假设
+python run.py --offline --approve --request examples/engineering/cn_design.json
+
+# 真实模型提取本次需求，合并显式模板后仍需确认
+python run.py --base-request examples/engineering/cn_design.json --query "新设计简支矩形梁，跨度6m，其余采用指定模板。"
 ```
 
-检查参数表，输入“确认”开始。已接入中国规范材料、荷载组合、受弯、受剪、适用构造、裂缝与长期挠度；支持按需DAG、当前进程局部重算和有限改设。
+`--code` 仅接受 `cn-2024`。任务文件省略 `code` 时同样使用 CN；旧教学字段、目标、配置及显式其他规范任务不能转入计算。
 
-- [运行说明：真实自然语言、已有梁验算、修改和改设](docs/cn_quickstart.md)
-- [规范任务与工具映射](docs/rc_beam_cn_design_spec.md)
-- [独立算术基准](docs/cn_reference_case.md)
-- [实际交付与验证记录](docs/cn_delivery_validation.md)
+参数表可输入 `修改 梁高 600 mm`、`修改 混凝土等级 C40`；修改后必须重新确认。报告以唯一文件名保存至 `outputs/`，包含完整精度 JSON、中文 Markdown、依据、公式版本、缓存记录和修订历史。退出码：请求检查通过为 0，失败、不完整或执行错误为 2。
 
-分项结论限定于支持范围；节点详图、现场构造及完整工程审查仍需工程师完成。
+## 支持范围和依据
 
-## Current capabilities
+- 简支矩形 RC 梁，全跨均布恒活载，单层受拉筋；已有梁可只检查指定项目。
+- 材料、作用组合、受弯、受剪、适用构造、裂缝及长期挠度。
+- GB/T 50010-2010（2024修订及未修订条文）、GB 55001-2021、GB 55008-2021、GB 50009-2012 的已实现子集。
+- 按目标执行 DAG、按输入和版本复用缓存、有限轮次自动改设。
+- 咨询解释实际工具证据；明确的自然语言参数修改先生成建议，采用、确认后才重算。
 
-- DeepSeek `deepseek-chat`
-- A two-node LangGraph ReAct loop
-- Tool calling with a deterministic calculator
-- Local demo-knowledge lookup
-- Thread-level short-term memory
-- Observable tool traces in a CLI
+当前边界为普通房屋、50 年、二级安全、一类环境及已列明的结构条件。请求分项通过仅说明支持范围内的检查结果，完整节点、施工、抗震及工程整体审查仍未覆盖。暂未实现 OCR、跨进程恢复、跨任务学习与多候选最优搜索。
 
-Engineering mode includes editable input confirmation and Markdown/JSON reports.
-The `cn-2024` mode additionally implements code-based cracked/long-term stiffness,
-selective recomputation and bounded redesign. Full engineering compliance,
-databases and OCR remain outside the supported scope. A local Streamlit workbench
-is available through the optional `ui` dependencies.
+## 模型配置
 
-## RC 梁教学引擎
-
-当前工作区：`E:/code/Engiagent`。保留原有 `python run.py` Demo。
-本节介绍原教学模式，其中国规范核验为“未完成”；中国规范新模式见上方入口。
-详见 [工具公式、来源和限制](docs/engineering_tools.md) 与
-[阶段验收和操作说明](docs/engineering_acceptance.md)。
-
-```powershell
-# 安装（已有环境可直接使用；测试需要 dev 依赖）
-D:/anaconda/envs/engiagent/python.exe -m pip install -e ".[dev]"
-
-# 离线示例：显示参数与假设，输入“确认”后计算
-D:/anaconda/envs/engiagent/python.exe run.py --engineering --request examples/engineering/paper_normal.json --offline
-
-# 可复现批量运行：--approve 显式确认文件参数与展示的教学假设
-D:/anaconda/envs/engiagent/python.exe run.py --engineering --request examples/engineering/paper_normal.json --offline --approve
-
-# 既有梁仅验抗弯（该例计入自重后应失败，退出码 2）
-D:/anaconda/envs/engiagent/python.exe run.py --engineering --request examples/engineering/flexure_only.json --offline --approve
-
-# 真实模型：不加 --offline；--query 使用真实 Dispatcher 提取中文任务
-D:/anaconda/envs/engiagent/python.exe run.py --engineering --query "请设计简支矩形梁，跨度6m……"
-
-# 离线测试；少量付费真实模型验证另外运行
-D:/anaconda/envs/engiagent/python.exe -m pytest -q
-D:/anaconda/envs/engiagent/python.exe examples/smoke_engineering.py
-```
-
-当前工作区已将 pytest 8.4.2 安装到 `.testdeps/`，可直接运行
-`D:/anaconda/envs/engiagent/python.exe scripts/run_tests.py`；原教学基线有74项回归测试，
-新增中国规范测试和真实DeepSeek结果见上方交付验证记录。
-
-确认表使用中文名称、分类、原输入/提取值、公制计算采用值、来源和确认状态；
-缺失项与由设计工具确定的项目分开显示。可直接输入 `修改 梁高 600 mm`、
-`修改 跨度 6 m` 或 `修改 4 6 m`（按表中编号）更正；有量纲的数值必须写单位。
-旧的 `span_mm={"value":7.62,"unit":"m"}` 写法仍兼容。支持单位详见工具文档；未知字段、
-量纲错误、缺失关键参数均不能确认。输入 `quit` 取消。
-`--offline` 只接受结构化文件并使用固定测试角色，不伪装自然语言识别。
-结构化文件省略 Dispatcher 模型调用；Design/Evaluation 在非离线模式仍调用 DeepSeek。
-
-结果写入 `outputs/`（默认不加入版本控制），使用唯一文件名，不覆盖旧报告。
-JSON 包含原始值、公制值、来源、确认状态、公式版本、输入哈希与完整工具结果。
-计算时立即显示设计/验算各阶段的进度与关键结果，最终终端显示简洁方案和验算对比表。
-Markdown先给结论、方案、验算对比，再给中文参数、系数和逐步计算结果；技术追溯信息折叠在末尾。
-普通数值适度取整，原始输入保留必要精度，判定及JSON中的计算数据始终保留完整精度。
-进度以结构化 `ProgressEvent` 写入JSON，也可通过 `run_engineering(..., on_event=callback)` 订阅。
-退出码：所请求项目试算通过为 0；试算失败、不完整或执行错误为 2。
-
-纸面参考梁为 25ft、12×20in、4.35ksi、60ksi、0.82/1.00kip/ft。
-`paper_normal.json` 计入自重；`paper_ignore_self_weight.json` 明确忽略自重作对照；
-`unsized_design.json` 演示初选后不可行时停止；`unsized_feasible.json` 提供较小活载的可行初选。
-钢筋公称面积和直径单独保存。
-首轮箍筋全跨均布，不输出论文中的分区箍筋总数。
-
-快速体验新版可读输出（整数公制，无需付费模型调用）：
-
-```powershell
-D:/anaconda/envs/engiagent/python.exe run.py --engineering --request examples/engineering/metric_design.json --offline
-D:/anaconda/envs/engiagent/python.exe run.py --engineering --request examples/engineering/metric_existing.json --offline
-```
-
-这两个例子对应6m、300×550mm的梁；设计结果为3根直径20mm纵筋、双肢直径8mm箍筋@250mm。
-自然语言真实模型仍使用原来的 `--query` 入口，确认表、进度和报告共用同一展示层。
-
-## Documentation
-
-- [EngiAgent architecture](docs/architecture.md)
-- [StructureClaw design notes](docs/structureclaw_notes.md)
-
-## Architecture
-
-```text
-START -> Agent -> tool calls? -- no --> END
-                   |
-                  yes
-                   v
-                ToolNode
-                   |
-                   +-----------> Agent
-```
-
-The LLM understands and explains. Python tools perform deterministic work.
-
-## Installation
-
-This workspace uses the existing Conda environment at
-`D:/anaconda/envs/engiagent/python.exe` (Python 3.11). From the project root:
-
-```powershell
-D:/anaconda/envs/engiagent/python.exe -m pip install -e ".[dev]"
-```
-
-Copy `.env.example` values into the local `.env` and replace the placeholder:
+离线运行不需要密钥。使用真实 DeepSeek 时，将 `.env.example` 的配置写入本机 `.env`：
 
 ```dotenv
 DEEPSEEK_API_KEY=your_deepseek_api_key_here
 DEEPSEEK_MODEL=deepseek-chat
 ```
 
-The real `.env` is ignored by Git.
+`.env`、运行输出和本机环境不加入版本管理。
 
-## Run
-
-```powershell
-D:/anaconda/envs/engiagent/python.exe run.py
-```
-
-Type `exit` or `quit` to leave the CLI. Tool calls and tool results are printed
-before the assistant's final answer.
-
-Example prompt:
-
-```text
-计算 12.5 × 8，同时告诉我 demo 规范中的安全系数。
-```
-
-## Tests
+## 验证与资料
 
 ```powershell
-D:/anaconda/envs/engiagent/python.exe -m pytest
+python scripts/run_tests.py
+python examples/cn_workflow_demo.py
+python examples/run_mechanism_experiment.py
+# 以下两个脚本会调用真实模型
+python examples/smoke_cn_engineering.py
+python examples/smoke_consultation.py
 ```
 
-The automated suite does not require a DeepSeek API key. A separate smoke test
-can exercise the hosted model when `DEEPSEEK_API_KEY` is configured.
+[CN 单体系迁移与验证](docs/cn_only_migration.md) · [当前架构](docs/architecture.md) · [CLI 操作](docs/cn_quickstart.md) · [工作台操作](docs/ui_quickstart.md) · [公式与适用范围](docs/rc_beam_cn_design_spec.md) · [独立算术基准](docs/cn_reference_case.md) · [咨询与机制实验说明](docs/consultation_delivery.md)
 
-```powershell
-D:/anaconda/envs/engiagent/python.exe examples/smoke_test.py
-```
-
-## Project layout
-
-```text
-run.py                         CLI entry point
-src/engi_agent/agent.py        LangGraph, tools, model, and memory
-src/engi_agent/config.py       Environment configuration
-src/engi_agent/tools/          Deterministic tools
-src/engi_agent/prompts/        System prompt
-knowledge/demo_knowledge.md    Local demo knowledge
-examples/basic_demo.py         One-turn usage example
-tests/                         Offline unit and graph tests
-```
-
-## Roadmap
-
-1. Generic ReAct Agent
-2. Engineering knowledge retrieval
-3. Engineering calculation tools
-4. Engineering workflow
-5. Verification and reflection
-6. Engineering report generation
-
-## API note
-
-Some older LangGraph tutorials use `MemorySaver` or hand-written tool dispatch.
-This MVP uses the current `InMemorySaver`, prebuilt `ToolNode`, and
-`tools_condition`. The explicit `StateGraph` is retained so the Agent → Tool →
-Agent loop remains visible.
+原文献、初始设计和早期评审文档保留为研究历史；涉及旧教学分支和 Demo 的描述不代表当前可运行功能。
