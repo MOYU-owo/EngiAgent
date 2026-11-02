@@ -29,7 +29,7 @@ def test_web_five_cases_and_navigation_never_reexecute(case):
     assert ctl.result.evaluation.status==('fail' if case=='改设达到上限停止' else 'pass')
     calls=len(ctl.calls)
     assert at.button(key='run').disabled
-    for page in ('计算与规范复核','Agent 与动态规划','对照实验','设计工作台'):
+    for page in ('计算与规范复核','Agent 与动态规划','专家咨询','对照实验','设计工作台'):
         at.radio(key='nav').set_value(page).run()
         assert not at.exception
         assert len(at.session_state['workbench'].calls)==calls
@@ -65,3 +65,34 @@ def test_web_pending_graph_and_experiment_are_truthful():
     at.radio(key='nav').set_value('对照实验').run()
     assert not at.exception
     assert any('未执行' in alert.value for alert in at.info)
+
+
+def test_web_consultation_adopt_confirm_and_recompute():
+    at=app('已有梁独立验算')
+    at.button(key='confirm').click().run();at.button(key='run').click().run()
+    at.radio(key='nav').set_value('专家咨询').run()
+    at.text_area(key='expert_query').set_value('梁高改为600mm').run()
+    at.button(key='ask_expert').click().run()
+    assert not at.exception
+    ctl=at.session_state['workbench'];reply=ctl.consultations[-1]
+    calls=len(ctl.calls)
+    at.run();assert len(ctl.calls)==calls
+    at.button(key='adopt_'+reply['id']).click().run()
+    assert not at.exception and ctl.stage=='validated'
+    at.radio(key='nav').set_value('设计工作台').run()
+    assert at.button(key='run').disabled
+    at.button(key='confirm').click().run();at.button(key='run').click().run()
+    assert not at.exception
+    assert ctl.result.request.parameters['beam_depth_mm'].value==600
+    assert ctl.completed_runs==2
+
+
+def test_web_mechanism_experiment_is_explicit_and_not_repeated_on_render():
+    at=app()
+    at.radio(key='nav').set_value('对照实验').run()
+    at.button(key='run_mechanism').click().run()
+    assert not at.exception
+    record=at.session_state['mechanism_record'];stamp=record['completed_at_utc']
+    assert len(record['rows'])==180 and all(r['equal_to_full'] for r in record['rows'])
+    at.run()
+    assert at.session_state['mechanism_record']['completed_at_utc']==stamp

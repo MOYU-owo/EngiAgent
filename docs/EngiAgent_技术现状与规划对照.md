@@ -1,5 +1,7 @@
 # EngiAgent 技术现状与规划对照
 
+> 历史快照：本文记录早期教学 MVP，不代表当前功能。中国规范、DAG、工作台与专家咨询的当前状态请从 README 及 `consultation_delivery.md` 查看。
+
 **更新日期：** 2026-10-22
 
 **代码基线：** `main`，`ac9afa5`

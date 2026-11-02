@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "kind": "same_kernel_mechanism_ablation",
+  "completed_at_utc": "2026-10-26T17:22:09.536654+00:00",
+  "python": "3.11.17",
+  "platform": "Windows-10-10.0.19045-SP0",
+  "source_hashes": {
+    "src\\engi_agent\\engineering\\experiments.py": "01416b18b2f69a1527a769b1ff66664bab6e79ac05ccb1c5362de9e7a9ddae62",
+    "src\\engi_agent\\engineering\\cn_tools.py": "1e4952ad8478895028237b025be70c66e018f41cf99e7d010bc1cf09559c2578",
+    "src\\engi_agent\\engineering\\cn_workflow.py": "d7c8d62f2961ea3d748cb676566a8cc612dce51e18ac261a8f2168070dd7f038",
+    "src\\engi_agent\\engineering\\dependency_graph.py": "7779ac35842ad038de5e281fdaee8341df172056a72d8a1896f15295120a9d14",
+    "src\\engi_agent\\engineering\\cn_schema.py": "ca91b0abfdf1610f62d27698cd63cd9844a20358e8db39fbb72cc916253f4ab2",
+    "src\\engi_agent\\engineering\\roles.py": "838271a20344551e0e748f77d085b367f514ff1a5c63d6c2bda4cb89539578b9",
+    "src\\engi_agent\\engineering\\workflow.py": "2d3152da465be6e9c1f54c961f011ccd4831a18a6e7adf003f86bb2ed61b57bf",
+    "examples\\engineering\\cn_existing.json": "49da4fc3111eabddf34bdeac86c9ecee5685678ad6ee35a040291dd4d576a9c6"
+  },
+  "repeats": 3,
+  "case_count": 20,
+  "summary": [
+    {
+      "group": "full",
+      "runs": 60,
+      "cases": 20,
+      "all_equal_to_full": true,
+      "executed_total": 660,
+      "reused_total": 0,
+      "median_wall_seconds": 0.0183342500240542,
+      "min_wall_seconds": 0.01715229998808354,
+      "max_wall_seconds": 0.05378030001884326
+    },
+    {
+      "group": "dag",
+      "runs": 60,
+      "cases": 20,
+      "all_equal_to_full": true,
+      "executed_total": 540,
+      "reused_total": 0,
+      "median_wall_seconds": 0.01735755000845529,
+      "min_wall_seconds": 0.01542370003880933,
+      "max_wall_seconds": 0.022295999980997294
+    },
+    {
+      "group": "dag_cache",
+      "runs": 60,
+      "cases": 20,
+      "all_equal_to_full": true,
+      "executed_total": 180,
+      "reused_total": 360,
+      "median_wall_seconds": 0.018105600000126287,
+      "min_wall_seconds": 0.015759499976411462,
+      "max_wall_seconds": 0.05631780001567677
+    }
+  ],
+  "limitations": [
+    "无模型网络请求、无人工作业时间、无外部工程真值",
+    "同内核、20种模板派生的目标/修改组合，不代表20个独立工程基准",
+    "初始结果已预热，计时包含修订、确认、编排与工具，不含初次启动",
+    "纯抗弯组只比较请求项；全量基线额外检查不用于推断局部任务全面通过",
+    "结果仅证明被测场景一致性和本机执行代价，不证明模型或多Agent优越性"
+  ],
+  "live_consultation": {
+    "calls": 3,
+    "intents": [
+      "explain",
+      "modify",
+      "clarify"
+    ],
+    "audit_path": "outputs/research/consultation_live_audit.json"
+  }
+}

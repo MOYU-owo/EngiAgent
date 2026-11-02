@@ -16,7 +16,7 @@ from .projections import (STAGES, VERDICTS, ACTIONS, TOOL_STATUS, GROUPS, LABELS
 from .diagrams import beam_svg, dag_dot, agent_dot
 from .formulas import FORMULAS, NOTES
 
-PAGES=['设计工作台','计算与规范复核','Agent 与动态规划','对照实验']
+PAGES=['设计工作台','计算与规范复核','Agent 与动态规划','专家咨询','对照实验']
 CSS='''
 <style>
 .stApp {font-family: "Segoe UI", "Microsoft YaHei", sans-serif;}
@@ -99,8 +99,8 @@ def sidebar(ctl):
         st.write('')
         st.radio('工作区',PAGES,key='nav',label_visibility='collapsed')
         st.divider()
-        st.radio('执行模式',['离线 · 确定性角色','DeepSeek · 真实模型'],key='execution_mode',on_change=ctl.mark_dirty)
-        st.caption('离线模式运行真实工程工具，使用固定角色；自然语言解析需要真实模型。')
+        st.radio('执行模式',['离线 · 确定性角色','DeepSeek · 真实模型','DeepSeek · 仅需求与咨询'],key='execution_mode',on_change=ctl.mark_dirty)
+        st.caption('仅需求与咨询模式由DeepSeek解析语言，设计和验算直接按工程DAG执行，减少复述工具计划的模型调用。')
         st.divider()
         st.caption('规范配置')
         st.markdown('**中国规范 · 限定梁模型**')
@@ -192,7 +192,7 @@ def parameters_panel(ctl):
         if ctl.stage=='confirmed':st.success('当前参数已确认，可以运行。')
         st.caption('50年、二级、一类环境；理想铰支。端部采用充分受拉直锚保守方案；节点详图仍需复核。')
         if run_clicked:
-            mode='offline' if st.session_state.execution_mode.startswith('离线') else 'DeepSeek'
+            mode='offline' if st.session_state.execution_mode.startswith('离线') else 'program' if '仅需求与咨询' in st.session_state.execution_mode else 'DeepSeek'
             with st.status('正在执行工程任务…',expanded=True) as status:
                 progress=st.progress(0)
                 messages=st.empty();lines=[]
@@ -405,7 +405,73 @@ def planning(ctl):
                 st.json(state.revisions[idx]['evaluation'])
 
 
+def expert(ctl):
+    from engi_agent.engineering.consultation import ConsultationReply, basis_hash
+    state=require_result(ctl)
+    if state is None:return
+    st.caption('基于当前结果解释失败原因、计算依据和执行记录；明确修改会生成建议，采用后须确认并重新验算。')
+    st.info('修改保留当前实配方案并转为已有梁验算；保持原验算项目。新方案重新选筋请使用设计工作台。')
+    query=st.text_area('向工程专家提问',key='expert_query',height=100,
+        placeholder='例如：为什么强度通过仍可能挠度超限？／梁高改为600mm／活载改为6kN/m')
+    live=st.session_state.execution_mode.startswith('DeepSeek')
+    st.caption('当前为DeepSeek意图解析，解释及数值来自实际工具。' if live else
+               '当前为离线规则咨询：支持检查解释及“梁高改为600mm”等明确赋值；自由表述请切换DeepSeek。')
+    if st.button('提交咨询',key='ask_expert',disabled=ctl.stage!='completed',type='primary'):
+        try:
+            with st.spinner('正在核对当前结果与问题…'):ctl.ask_expert(query,'DeepSeek' if live else 'offline')
+            st.rerun()
+        except ValueError as exc:st.error(str(exc))
+    for record in reversed(ctl.consultations):
+        reply=ConsultationReply.model_validate(record)
+        with st.container(border=True):
+            st.markdown('**问题：** '+reply.query)
+            stale=reply.basis_hash!=basis_hash(state) or ctl.stage!='completed'
+            st.caption(f'依据：修订 {reply.revision}'+(' · 历史依据，不能采用' if stale else ' · 当前结果'))
+            if reply.decision.intent=='unsupported':st.warning('该问题超出当前工程模型，请由工程师另行分析。')
+            for question in reply.decision.questions:st.info(question)
+            if reply.preview:
+                st.markdown('**参数建议 · 尚未计算修改后结果**')
+                st.dataframe([{k:v for k,v in row.items() if k!='field'} for row in reply.preview],hide_index=True,width='stretch')
+                if st.button('将建议写入待确认草稿',key='adopt_'+reply.id,disabled=stale or reply.applied):
+                    try:ctl.adopt_expert_proposal(reply.id);st.rerun()
+                    except ValueError as exc:st.error(str(exc))
+                if reply.applied:st.success('建议已写入草稿，请回到设计工作台确认后运行。')
+            for item in reply.evidence:
+                st.markdown('**'+item.title+'**')
+                st.write(item.text)
+                if item.tool:
+                    # Historical evidence always uses the recorded output, never current values.
+                    shown=[{'项目':OUTPUTS.get(k,k),'记录值':number(v) if isinstance(v,(int,float)) and not isinstance(v,bool) else str(v)} for k,v in item.outputs.items()
+                           if not isinstance(v,(dict,list))]
+                    if shown:st.dataframe(shown,hide_index=True,width='stretch')
+                    for formula in FORMULAS.get(item.tool,[]):st.latex(formula)
+                if item.references:st.caption('依据：'+'；'.join(item.references))
+                with st.expander('本条解释的原始证据'):st.json(item.outputs)
+            st.caption(reply.limitation)
+
+
 def experiments():
+    from engi_agent.engineering.experiments import run_mechanism_experiment, experiment_markdown
+    st.markdown('### 工程依赖与缓存 · 同内核机制对照')
+    st.caption('20种目标/修改组合，对比全量无缓存、按目标无缓存、按目标缓存；不发起模型请求。')
+    if st.button('运行机制对照实验',key='run_mechanism'):
+        with st.spinner('正在执行真实工具并逐项核对输出…'):
+            st.session_state.mechanism_record=run_mechanism_experiment()
+    record=st.session_state.get('mechanism_record')
+    if record:
+        st.success('机制对照已实际执行 · '+str(record['case_count'])+'种组合')
+        names={'full':'全量无缓存','dag':'按目标无缓存','dag_cache':'按目标与有效缓存'}
+        st.dataframe([{'执行组':names[r['group']],'运行次数':r['runs'],
+                       '实际执行节点合计':r['executed_total'],'复用合计':r['reused_total'],
+                       '单次耗时中位数/s':r['median_wall_seconds'],'请求项输出一致':r['all_equal_to_full']}
+                      for r in record['summary']],hide_index=True,width='stretch')
+        for item in record['limitations']:st.caption(item)
+        a,b=st.columns(2)
+        a.download_button('下载机制实验 JSON',json.dumps(record,ensure_ascii=False,indent=2),
+                          'mechanism_ablation.json','application/json',on_click='ignore')
+        b.download_button('下载机制实验报告',experiment_markdown(record),
+                          'mechanism_ablation.md','text/markdown',on_click='ignore')
+    else:st.info('机制对照尚未在本会话运行。')
     with st.container(border=True,key='card_experiment'):
         st.markdown('### 统一案例对照 · 后续扩展')
         st.info('正式对照实验未执行')
@@ -425,4 +491,5 @@ def main():
     if page==PAGES[0]:workbench(ctl)
     elif page==PAGES[1]:review(ctl)
     elif page==PAGES[2]:planning(ctl)
+    elif page=='专家咨询':expert(ctl)
     else:experiments()

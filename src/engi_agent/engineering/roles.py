@@ -68,6 +68,15 @@ class DeepSeekRoles:
         return RolePlan.model_validate(response)
 
 
+class ProgramRoles:
+    """Production deterministic plan adapter; requires an already structured request."""
+    def parse(self, query):
+        raise ValueError('程序角色不解析自然语言，请使用Dispatcher或结构化文件')
+
+    def plan(self, role, payload):
+        return RolePlan(steps=payload['required_steps'],explanation=f'工程DAG确定性执行 {role}')
+
+
 class FixtureRoles:
     """Explicit offline fixture, not a natural-language parser substitute."""
     def __init__(self, request: TaskRequest):

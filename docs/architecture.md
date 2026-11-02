@@ -1,5 +1,7 @@
 # EngiAgent 架构说明
 
+> 本文是原 Generic ReAct Demo 的架构讲义。当前中国规范工程模式、工作台和专家咨询为独立扩展，见 README 与 `consultation_delivery.md`，不要将本文的 Demo 范围当作整个项目的当前能力。
+
 ## 0. 如何阅读这份文档
 
 这份文档的目标不是记住 LangGraph 的 API，而是回答一个更基础的问题：**一条用户输入，怎样穿过模型、工具和状态，最终变成一条可信的回答？**

@@ -101,7 +101,7 @@ def agent_dot(calls, state=None):
     for i,call in enumerate(calls):
         role=call['role']; status=call['status']; mode=call.get('mode','未记录')
         color='#f9e8e7' if status=='error' else '#e7effa'
-        caption=role+'\n'+('文件读取' if mode=='structured_file' else '离线角色' if mode=='offline' else mode)+' · '+('调用完成' if status=='success' else '失败' if status=='error' else '执行中')
+        caption=role+'\n'+('文件读取' if mode=='structured_file' else '离线角色' if mode=='offline' else '程序DAG · 无模型调用' if mode=='program' else mode)+' · '+('调用完成' if status=='success' else '失败' if status=='error' else '执行中')
         lines.append(f'n{i} [label={json.dumps(caption,ensure_ascii=False)}, fillcolor="{color}", color="#9aabc0"];')
         if previous is not None:
             feedback=(' [label="工程师确认后新请求"]' if call.get('run_id')!=calls[previous].get('run_id') and calls[previous].get('run_id',0)!=0

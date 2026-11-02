@@ -5,6 +5,14 @@ original demo demonstrates deterministic tool calling and multi-turn conversatio
 The engineering mode provides a Chinese CLI for teaching and Chinese-code RC
 beam design/evaluation, with three DeepSeek roles and validated Python tools.
 
+## 专家咨询与真实机制对照（2026-10-27）
+
+新增专家咨询页：解释已有结果、提取有原文依据的参数修改，采用后重新确认并走实际验算与局部重算。
+新增“DeepSeek · 仅需求与咨询”模式，设计/验算直接按工程DAG执行；保留原全模型模式。
+对照实验页可实际运行20种组合的全量/DAG/缓存机制对照并导出数据。
+
+[使用与验证记录](docs/consultation_delivery.md)。本轮新服务端口8512；8511若仍运行旧服务，可使用 `python -m streamlit run streamlit_app.py --server.port 8512`。
+
 ## 可视化工作台（2026-10-26）
 
 ```powershell

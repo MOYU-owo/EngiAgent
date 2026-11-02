@@ -12,7 +12,7 @@ from engi_agent.engineering.schema import EngineeringState, TaskRequest, Paramet
 from engi_agent.engineering.workflow import prepare, confirm, run_engineering
 from engi_agent.engineering.cn_workflow import revise, ALL_TARGETS
 from engi_agent.engineering.cn_schema import CN_UNITS
-from engi_agent.engineering.roles import FixtureRoles, DeepSeekRoles, RolePlan
+from engi_agent.engineering.roles import FixtureRoles, DeepSeekRoles, RolePlan, ProgramRoles
 from engi_agent.engineering.reporting import markdown_report
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -88,6 +88,7 @@ class WorkbenchSession:
     editor_generation: int = 0
     completed_runs: int = 0
     executed_mode: str | None = None
+    consultations: list[dict] = field(default_factory=list)
 
     def mark_dirty(self):
         if self.stage != 'running':
@@ -110,6 +111,7 @@ class WorkbenchSession:
         self.stage = 'editing' if prepared.missing_parameters or prepared.errors else 'validated'
         self.errors = prepared.errors.copy()
         self.calls, self.progress, self.audit_runs = [], [], []
+        self.consultations = []
         self.completed_runs = 0
         self.executed_mode = None
         self.editor_generation += 1
@@ -194,13 +196,14 @@ class WorkbenchSession:
         self.draft = confirm(prepared)
         self.stage = 'confirmed'
 
-    def run(self, mode: Literal['offline','DeepSeek'], callback: Callable | None = None, roles=None):
+    def run(self, mode: Literal['offline','DeepSeek','program'], callback: Callable | None = None, roles=None):
         if self.stage != 'confirmed' or self.draft is None:
             raise ValueError('只能运行已确认的当前参数；刷新与重复点击不会再次执行。')
         self.stage, self.errors, self.progress = 'running', [], []
         start_call = len(self.calls)
         try:
-            client = RecordingRoles(roles or (FixtureRoles(self.draft.request) if mode == 'offline' else DeepSeekRoles()), self.calls, mode,self.completed_runs+1)
+            inner=roles or (FixtureRoles(self.draft.request) if mode=='offline' else ProgramRoles() if mode=='program' else DeepSeekRoles())
+            client = RecordingRoles(inner, self.calls, mode,self.completed_runs+1)
             def on_event(event):
                 self.progress.append(event.model_dump())
                 if callback: callback(event)
@@ -222,12 +225,55 @@ class WorkbenchSession:
                 self.errors=['执行被中断，未形成新的结论；系统不会自动重试模型调用。']
         return self.result
 
+    def ask_expert(self, query: str, mode='offline', client=None):
+        from engi_agent.engineering.consultation import consult, DeepSeekConsultant, RuleConsultant
+        if self.stage != 'completed' or self.result is None:
+            raise ValueError('请先完成当前参数的计算，再针对当前结果咨询。')
+        if mode not in ('offline','DeepSeek'):raise ValueError('不支持的咨询模式')
+        try:
+            inner=client or (DeepSeekConsultant() if mode=='DeepSeek' else RuleConsultant())
+        except Exception:
+            raise ValueError('咨询模型配置不可用，请检查本机配置或选择离线咨询。') from None
+        recorder=RecordingRoles(inner,self.calls,mode,self.completed_runs)
+        class RecordedConsultant:
+            def consult(_, question, evidence, history):
+                return recorder._invoke('ExpertConsultation',
+                    {'query':question,'current':evidence,'recent_consultations':history[-4:]},
+                    lambda:inner.consult(question,evidence,history))
+        history=[{'query':r['query'],'decision':r['decision']} for r in self.consultations[-4:]]
+        try:
+            reply=consult(self.result,query,RecordedConsultant(),history)
+        except ValueError as exc:
+            # Our validation errors are useful; provider payloads are not displayed.
+            if self.calls and self.calls[-1].status=='error':
+                raise ValueError('咨询解析未完成，请重试；当前工程结果没有改变。') from None
+            raise ValueError('咨询建议未通过校验：'+str(exc)) from None
+        except Exception:
+            raise ValueError('咨询请求失败；当前工程结果没有改变。') from None
+        self.consultations.append(reply.model_dump())
+        return reply
+
+    def adopt_expert_proposal(self, reply_id):
+        from engi_agent.engineering.consultation import ConsultationReply, apply_proposal
+        if self.stage!='completed' or self.result is None:
+            raise ValueError('已有待处理草稿，请先完成或重新加载任务。')
+        record=next((r for r in self.consultations if r['id']==reply_id),None)
+        if record is None:raise ValueError('没有此咨询记录')
+        pending=apply_proposal(self.result,ConsultationReply.model_validate(record))
+        self.draft=pending
+        self.stage='validated'
+        self.errors=[]
+        self.editor_generation+=1
+        record['applied']=True
+        return pending
+
     def downloads(self):
         if self.result is None: return {}
         return {
             'md': markdown_report(self.result,'engiagent_result.json').encode('utf-8'),
             'json': self.result.model_dump_json(indent=2).encode('utf-8'),
-            'audit': json.dumps({'calls':[vars(c) for c in self.calls], 'runs':self.audit_runs},ensure_ascii=False,indent=2).encode('utf-8'),
+            'audit': json.dumps({'calls':[vars(c) for c in self.calls], 'runs':self.audit_runs,
+                                 'consultations':self.consultations},ensure_ascii=False,indent=2).encode('utf-8'),
         }
 
 
