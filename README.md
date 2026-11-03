@@ -1,5 +1,9 @@
 # EngiAgent
 
+当前专家咨询界面：公式LaTeX渲染、动态可选问题、键盘填入及精简说明，见[更新说明](docs/expert_format_suggestions.md)。本机新版本 http://127.0.0.1:8522 。
+
+最新咨询与复核版：[真实对话、LaTeX代入与正式依据](docs/expert_dialogue_review_delivery.md)，本机地址 http://127.0.0.1:8520 。
+
 当前反馈修正版：参数规格校验、分步数值代入计算书、失败改设及多候选比较。见[操作与验证](docs/feedback_design_delivery.md)；本机新版地址 http://127.0.0.1:8517 。
 
 EngiAgent 是仅运行中国规范的钢筋混凝土梁设计、验算与咨询原型。2026-11-02 起移除了旧教学计算分支和通用 Agent Demo；所有入口默认 `cn-2024`，其他规范代码会被拒绝。
@@ -8,7 +12,7 @@ EngiAgent 是仅运行中国规范的钢筋混凝土梁设计、验算与咨询�
 
 ```powershell
 conda activate engiagent
-python -m pip install -e ".[dev,ui]"
+python -m pip install -e ".[dev,ui,ocr]"
 python -m streamlit run streamlit_app.py --server.port 8512 --server.address 127.0.0.1
 ```
 
@@ -49,7 +53,9 @@ python run.py --base-request examples/engineering/cn_design.json --query "新设
 - 按目标执行 DAG、按输入和版本复用缓存、有限轮次自动改设。
 - 咨询解释实际工具证据；明确的自然语言参数修改先生成建议，采用、确认后才重算。
 
-当前边界为普通房屋、50 年、二级安全、一类环境及已列明的结构条件。请求分项通过仅说明支持范围内的检查结果，完整节点、施工、抗震及工程整体审查仍未覆盖。暂未实现 OCR、跨进程恢复、跨任务学习与多候选最优搜索。
+当前边界为普通房屋、50 年、二级安全、一类环境及已列明的结构条件。请求分项通过仅说明支持范围内的检查结果，完整节点、施工、抗震及工程整体审查仍未覆盖。暂未实现跨进程恢复、跨任务学习与全局最优搜索。
+
+新设计支持截面与配筋联合有限搜索：梁宽、梁高给定即固定，留空尺寸可按失败原因调整；明确尺寸上限优先。未给上限时采用初选宽度以上200mm、初选高度以上300mm的程序搜索范围，确认前展示。通过方案先去重、剔除支配方案，再展示最多1—3项。推荐只使用混凝土体积和受拉纵筋面积的透明相对指标，不代表总用钢量或造价最优。前端可直接加载「截面与配筋联合设计」案例；复现说明见 [截面搜索修复与验收](docs/section_search_delivery.md)。
 
 ## 模型配置
 
@@ -76,3 +82,9 @@ python examples/smoke_consultation.py
 [CN 单体系迁移与验证](docs/cn_only_migration.md) · [当前架构](docs/architecture.md) · [CLI 操作](docs/cn_quickstart.md) · [前端详细使用手册](docs/EngiAgent_前端详细使用手册.md) · [公式与适用范围](docs/rc_beam_cn_design_spec.md) · [独立算术基准](docs/cn_reference_case.md) · [咨询与机制实验说明](docs/consultation_delivery.md)
 
 原文献、初始设计和早期评审文档保留为研究历史；涉及旧教学分支和 Demo 的描述不代表当前可运行功能。
+## 图片识别输入
+
+安装图片输入依赖：`python -m pip install -e ".[ui,ocr]"`。
+在设计工作台的「任务来源」选择「图片识别 OCR」，上传需求截图或参数说明，点击「识别图片文字」。核对识别文本，可补充设计/验算要求，再点击「将识别文本交给 Dispatcher」（需 DeepSeek 模式）。后续沿用参数校验、缺项补充、工程师确认与计算流程。
+
+图片直接发送给 DeepSeek 云端视觉模型（默认 `deepseek-flash`，可通过 `DEEPSEEK_VISION_MODEL` 配置），复用 `DEEPSEEK_API_KEY`；核对后的任务描述再交给 Dispatcher。支持 PNG/JPEG/WebP/BMP，最大 10 MB、2000 万像素。当前提取图片文字，不解析未标注的图纸几何关系；复杂公式和手写内容需人工核对。审计记录包含图片摘要、原始视觉识别描述、待核对项、识别模型和最终分派文本。

@@ -146,9 +146,12 @@ def parameter_rows(state):
         if item:
             raw = parameter_value(key, item.raw_value if item.raw_value is not None else item.value,
                                   item.raw_unit if item.raw_unit is not None else item.unit, raw=True)
+            selected = state.candidate.get(key) if state.request.task_type == 'new_design' else None
+            changed = selected is not None and selected != item.value
             rows.append([str(index), group, field_label(key), raw,
-                         parameter_value(key, item.value, item.unit), SOURCES.get(item.source, item.source),
-                         "已确认" if item.confirmed else "待确认"])
+                         parameter_value(key, selected if changed else item.value, item.unit),
+                         '设计工具选用（原输入保留）' if changed else SOURCES.get(item.source, item.source),
+                         '已计算' if changed else "已确认" if item.confirmed else "待确认"])
         else:
             missing = key in state.missing_parameters
             derived = state.candidate.get(key)
@@ -269,8 +272,13 @@ def confirmation_text(state, markdown=False):
              table(PARAMETER_HEADERS,parameter_rows(state),markdown=markdown), '依据：'+p.source, p.source_note,
              '组合：1.3Gk+1.5Qk；裂缝与长期挠度：Gk+ψqQk。',
              f'有限改设：{"开启" if state.request.auto_redesign else "关闭"}；最多{state.request.max_iterations}轮。',
-             '提供的截面尺寸视为固定；未提供的尺寸按经验初选，增大不得超出明确上限。',
+             '提供的截面尺寸固定；留空尺寸由程序在下列范围内初选、改设并复核。其他材料、荷载及构造输入保持确认值。',
              '理想铰支、无截断搭接；支座采用充分受拉直锚保守方案；施工与节点详图需工程师复核。']
+    if state.request.task_type == 'new_design' and 'span_mm' in state.request.parameters:
+        from .design_search import search_domain, domain_text
+        from .cn_schema import parameter_python
+        params = {k:parameter_python(k,v) for k,v in state.request.parameters.items()}
+        lines += [domain_text(search_domain(params))]
     if state.missing_parameters: lines += ['缺失：'+'、'.join(CN_FIELDS.get(k,FIELDS.get(k,(k,))[0]) for k in state.missing_parameters)]
     return ('\n\n' if markdown else '\n').join(lines)
 
@@ -306,9 +314,15 @@ def markdown_report(state, json_filename=None):
     lines += ['搜索直径目录：'+str(state.request.search_diameters_mm or '固定输入直径')+'；期望通过候选数：'+str(state.request.solution_count),'',
               '搜索停止原因：'+(state.search_stop_reason or '未开展设计搜索'),'']
     if state.design_alternatives:
-        lines += ['## 已通过候选对照','',table(['修订','实配纵筋','纵筋面积/mm²','当前选用'],
-            [[str(r['revision']),str(r['candidate']['bar_count'])+'Φ'+number(r['candidate']['bar_diameter_mm']),number(r['candidate']['As_mm2'],4),'是' if r['revision']==state.design_revision else '否'] for r in state.design_alternatives],markdown=True),
-            '推荐只比较已通过候选的纵筋面积，不代表造价最优。全部候选与失败尝试保存在JSON修订记录。','']
+        lines += ['## 筛选后的已通过候选','',table(['修订','截面/mm','纵筋','纵筋面积/mm²','混凝土/m³','控制利用率','保留原因','当前选用'],
+            [[str(r['revision']),number(r['candidate']['beam_width_mm'])+'×'+number(r['candidate']['beam_depth_mm']),
+              str(r['candidate']['bar_count'])+'Φ'+number(r['candidate']['bar_diameter_mm']),number(r['candidate']['As_mm2'],4),
+              number(r.get('metrics',{}).get('concrete_m3'),4),number(r.get('metrics',{}).get('governing_utilization'),3),
+              r.get('selection_reason','已通过候选'),'是' if r['revision']==state.design_revision else '否'] for r in state.design_alternatives],markdown=True),'']
+    filtering = state.design_search.get('filter')
+    if filtering:
+        lines += [f"实际尝试{filtering['tested']}轮，通过{filtering['passed']}轮；去重{filtering['duplicates']}项、剔除支配方案{filtering['dominated']}项，展示{filtering['displayed']}项。",
+                  filtering['rule'],filtering['limitation'],'全部尝试及其真实工具结果保存在JSON修订记录。','']
     if json_filename: lines += [f'[完整JSON轨迹]({json_filename})','']
     if state.request.user_query: lines += ['原始需求：'+state.request.user_query,'']
     lines += ['## 分项计算过程','']

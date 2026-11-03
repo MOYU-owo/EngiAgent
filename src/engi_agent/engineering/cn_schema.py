@@ -142,7 +142,7 @@ class TaskRequest(Contract):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False, validate_assignment=True)
     code: Literal["cn-2024"] = "cn-2024"
     auto_redesign: bool = False
-    max_iterations: int = Field(default=3, ge=1, le=10)
+    max_iterations: int = Field(default=12, ge=1, le=40)
     task_type: Literal["new_design", "evaluate_existing", "unsupported"]
     parameters: dict[str, ParameterValue] = Field(default_factory=dict)
     targets: list[Target] = Field(default_factory=lambda: ["flexure", "shear", "detailing", "crack", "deflection"])
@@ -245,3 +245,4 @@ class EngineeringState(Contract):
     revision_reason: str = '初始任务'
     design_alternatives: list[dict[str, Any]] = Field(default_factory=list)
     search_stop_reason: str = ''
+    design_search: dict[str, Any] = Field(default_factory=dict)

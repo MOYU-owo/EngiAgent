@@ -1,6 +1,7 @@
 """Render numeric substitutions as LaTeX via an AST whitelist, without evaluation."""
 import ast
 import math
+import re
 
 FORMULAS={
  '实配钢筋面积':r'A_s=n A_1',
@@ -49,6 +50,13 @@ FORMULAS={
 def numeric_latex(expression):
     """None for prose or unsupported syntax; never execute the input expression."""
     if len(expression)>2000:return None
+    comparison=re.fullmatch(r'\s*([-+0-9.eE]+)\s*([≤≥])\s*([-+0-9.eE]+)\s*',expression)
+    if comparison:
+        try:
+            left=float(comparison[1]);right=float(comparison[3])
+            if not math.isfinite(left) or not math.isfinite(right):return None
+            return f'{left:.8g}'+(r'\le ' if comparison[2]=='≤' else r'\ge ')+f'{right:.8g}'
+        except ValueError:return None
     expression=expression.replace('×','*').replace('²','**2').replace('³','**3').replace('⁴','**4').replace('⁶','**6').replace('π','pi').replace('⁻','-')
     def render(node,depth=0):
         if depth>40:raise ValueError('too deep')
@@ -64,9 +72,14 @@ def numeric_latex(expression):
         if isinstance(node,ast.BinOp):
             l,r=child(node.left),child(node.right)
             if isinstance(node.op,ast.Div):return r'\frac{'+l+'}{'+r+'}'
-            if isinstance(node.op,ast.Pow):return r'\left('+l+r'\right)^{'+r+'}'
+            if isinstance(node.op,ast.Pow):return (r'\left('+l+r'\right)' if isinstance(node.left,ast.BinOp) else l)+'^{'+r+'}'
             op={ast.Add:'+',ast.Sub:'-',ast.Mult:r'\times'}.get(type(node.op))
-            if op:return r'\left('+l+op+r+r'\right)'
+            if op:
+                if isinstance(node.op,ast.Mult):
+                    if isinstance(node.left,ast.BinOp) and isinstance(node.left.op,(ast.Add,ast.Sub)):l=r'\left('+l+r'\right)'
+                    if isinstance(node.right,ast.BinOp) and isinstance(node.right.op,(ast.Add,ast.Sub)):r=r'\left('+r+r'\right)'
+                elif isinstance(node.right,ast.BinOp) and isinstance(node.op,ast.Sub):r=r'\left('+r+r'\right)'
+                return l+op+r
         if isinstance(node,ast.Call) and isinstance(node.func,ast.Name) and node.func.id in ('max','min','clamp') and not node.keywords:
             return r'\operatorname{'+node.func.id+r'}\!\left('+','.join(child(a) for a in node.args)+r'\right)'
         raise ValueError('unsupported syntax')

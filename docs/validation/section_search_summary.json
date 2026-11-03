@@ -1,0 +1,308 @@
+{
+  "date": "2026-11-03",
+  "policy_version": "cn-section-search-v1",
+  "formula_version_changed": false,
+  "source": "D:/下载/engiagent_report.md",
+  "input_interpretation": "confirmed table/tool inputs; original prose disagrees on fixed dimensions",
+  "baseline": {
+    "status": "fail",
+    "checks": {
+      "flexure": true,
+      "shear": true,
+      "detailing": false,
+      "crack": true,
+      "deflection": true
+    },
+    "clear_spacing_mm": 6.4
+  },
+  "cases": [
+    {
+      "case": "原轮次预算_6轮",
+      "status": "pass",
+      "candidate": {
+        "beam_width_mm": 250.0,
+        "beam_depth_mm": 550.0,
+        "bar_count": 3,
+        "bar_diameter_mm": 22,
+        "stirrup_diameter_mm": 8.0,
+        "stirrup_legs": 2,
+        "end_anchor_stirrup_spacing_mm": 100.0,
+        "As_mm2": 1140.398133253095,
+        "stirrup_spacing_mm": 350.0,
+        "status": "checked"
+      },
+      "search": {
+        "policy_version": "cn-section-search-v1",
+        "domain": {
+          "beam_width_mm": {
+            "fixed": false,
+            "initial_mm": 250,
+            "maximum_mm": 450,
+            "step_mm": 25,
+            "bound_source": "程序有限搜索范围"
+          },
+          "beam_depth_mm": {
+            "fixed": false,
+            "initial_mm": 500,
+            "maximum_mm": 800,
+            "step_mm": 25,
+            "bound_source": "程序有限搜索范围"
+          }
+        },
+        "filter": {
+          "tested": 6,
+          "passed": 3,
+          "unique_passed": 3,
+          "duplicates": 0,
+          "dominated": 0,
+          "pareto_count": 3,
+          "displayed": 3,
+          "rule": "先去重，再按混凝土体积、受拉纵筋面积、梁高、控制利用率剔除支配方案；最多保留确认数量。",
+          "limitation": "仅比较实际算过且全部检查通过的候选；纵筋面积不含箍筋、架立筋、腰筋及锚固用量，不代表总用钢量或造价。"
+        }
+      },
+      "alternatives": [
+        {
+          "revision": 4,
+          "candidate": {
+            "beam_width_mm": 250.0,
+            "beam_depth_mm": 550.0,
+            "bar_count": 3,
+            "bar_diameter_mm": 22,
+            "stirrup_diameter_mm": 8.0,
+            "stirrup_legs": 2,
+            "end_anchor_stirrup_spacing_mm": 100.0,
+            "As_mm2": 1140.398133253095,
+            "stirrup_spacing_mm": 350.0,
+            "status": "checked"
+          },
+          "checks": {
+            "flexure": true,
+            "shear": true,
+            "detailing": true,
+            "crack": true,
+            "deflection": true
+          },
+          "metrics": {
+            "concrete_m3": 0.825,
+            "tension_steel_mm2": 1140.398133253095,
+            "depth_mm": 550.0,
+            "governing_utilization": 0.9363737962639681
+          },
+          "selection_reason": "已验算候选中，混凝土体积与受拉纵筋面积的等权相对指标最小"
+        },
+        {
+          "revision": 3,
+          "candidate": {
+            "beam_width_mm": 250.0,
+            "beam_depth_mm": 550.0,
+            "bar_count": 4,
+            "bar_diameter_mm": 20.0,
+            "stirrup_diameter_mm": 8.0,
+            "stirrup_legs": 2,
+            "end_anchor_stirrup_spacing_mm": 100.0,
+            "As_mm2": 1256.6370614359173,
+            "stirrup_spacing_mm": 350.0,
+            "status": "checked"
+          },
+          "checks": {
+            "flexure": true,
+            "shear": true,
+            "detailing": true,
+            "crack": true,
+            "deflection": true
+          },
+          "metrics": {
+            "concrete_m3": 0.825,
+            "tension_steel_mm2": 1256.6370614359173,
+            "depth_mm": 550.0,
+            "governing_utilization": 0.7721362236687145
+          },
+          "selection_reason": "验算裕量较大，保留工程取舍"
+        },
+        {
+          "revision": 6,
+          "candidate": {
+            "beam_width_mm": 300.0,
+            "beam_depth_mm": 500.0,
+            "bar_count": 5,
+            "bar_diameter_mm": 20.0,
+            "stirrup_diameter_mm": 8.0,
+            "stirrup_legs": 2,
+            "end_anchor_stirrup_spacing_mm": 100.0,
+            "As_mm2": 1570.7963267948967,
+            "stirrup_spacing_mm": 300.0,
+            "status": "checked"
+          },
+          "checks": {
+            "flexure": true,
+            "shear": true,
+            "detailing": true,
+            "crack": true,
+            "deflection": true
+          },
+          "metrics": {
+            "concrete_m3": 0.9,
+            "tension_steel_mm2": 1570.7963267948967,
+            "depth_mm": 500.0,
+            "governing_utilization": 0.8145727349266206
+          },
+          "selection_reason": "梁高较小，保留工程取舍"
+        }
+      ],
+      "stop": "已达到确认的改设轮次上限；仅在已授权候选范围内搜索。"
+    },
+    {
+      "case": "截面配筋搜索_12轮",
+      "status": "pass",
+      "candidate": {
+        "beam_width_mm": 250.0,
+        "beam_depth_mm": 550.0,
+        "bar_count": 3,
+        "bar_diameter_mm": 22,
+        "stirrup_diameter_mm": 8.0,
+        "stirrup_legs": 2,
+        "end_anchor_stirrup_spacing_mm": 100.0,
+        "As_mm2": 1140.398133253095,
+        "stirrup_spacing_mm": 350.0,
+        "status": "checked"
+      },
+      "search": {
+        "policy_version": "cn-section-search-v1",
+        "domain": {
+          "beam_width_mm": {
+            "fixed": false,
+            "initial_mm": 250,
+            "maximum_mm": 450,
+            "step_mm": 25,
+            "bound_source": "程序有限搜索范围"
+          },
+          "beam_depth_mm": {
+            "fixed": false,
+            "initial_mm": 500,
+            "maximum_mm": 800,
+            "step_mm": 25,
+            "bound_source": "程序有限搜索范围"
+          }
+        },
+        "filter": {
+          "tested": 12,
+          "passed": 5,
+          "unique_passed": 5,
+          "duplicates": 0,
+          "dominated": 1,
+          "pareto_count": 4,
+          "displayed": 3,
+          "rule": "先去重，再按混凝土体积、受拉纵筋面积、梁高、控制利用率剔除支配方案；最多保留确认数量。",
+          "limitation": "仅比较实际算过且全部检查通过的候选；纵筋面积不含箍筋、架立筋、腰筋及锚固用量，不代表总用钢量或造价。"
+        }
+      },
+      "alternatives": [
+        {
+          "revision": 4,
+          "candidate": {
+            "beam_width_mm": 250.0,
+            "beam_depth_mm": 550.0,
+            "bar_count": 3,
+            "bar_diameter_mm": 22,
+            "stirrup_diameter_mm": 8.0,
+            "stirrup_legs": 2,
+            "end_anchor_stirrup_spacing_mm": 100.0,
+            "As_mm2": 1140.398133253095,
+            "stirrup_spacing_mm": 350.0,
+            "status": "checked"
+          },
+          "checks": {
+            "flexure": true,
+            "shear": true,
+            "detailing": true,
+            "crack": true,
+            "deflection": true
+          },
+          "metrics": {
+            "concrete_m3": 0.825,
+            "tension_steel_mm2": 1140.398133253095,
+            "depth_mm": 550.0,
+            "governing_utilization": 0.9363737962639681
+          },
+          "selection_reason": "已验算候选中，混凝土体积与受拉纵筋面积的等权相对指标最小"
+        },
+        {
+          "revision": 11,
+          "candidate": {
+            "beam_width_mm": 300.0,
+            "beam_depth_mm": 550.0,
+            "bar_count": 5,
+            "bar_diameter_mm": 20.0,
+            "stirrup_diameter_mm": 8.0,
+            "stirrup_legs": 2,
+            "end_anchor_stirrup_spacing_mm": 100.0,
+            "As_mm2": 1570.7963267948967,
+            "stirrup_spacing_mm": 350.0,
+            "status": "checked"
+          },
+          "checks": {
+            "flexure": true,
+            "shear": true,
+            "detailing": true,
+            "crack": true,
+            "deflection": true
+          },
+          "metrics": {
+            "concrete_m3": 0.99,
+            "tension_steel_mm2": 1570.7963267948967,
+            "depth_mm": 550.0,
+            "governing_utilization": 0.6001682053341554
+          },
+          "selection_reason": "验算裕量较大，保留工程取舍"
+        },
+        {
+          "revision": 6,
+          "candidate": {
+            "beam_width_mm": 300.0,
+            "beam_depth_mm": 500.0,
+            "bar_count": 5,
+            "bar_diameter_mm": 20.0,
+            "stirrup_diameter_mm": 8.0,
+            "stirrup_legs": 2,
+            "end_anchor_stirrup_spacing_mm": 100.0,
+            "As_mm2": 1570.7963267948967,
+            "stirrup_spacing_mm": 300.0,
+            "status": "checked"
+          },
+          "checks": {
+            "flexure": true,
+            "shear": true,
+            "detailing": true,
+            "crack": true,
+            "deflection": true
+          },
+          "metrics": {
+            "concrete_m3": 0.9,
+            "tension_steel_mm2": 1570.7963267948967,
+            "depth_mm": 500.0,
+            "governing_utilization": 0.8145727349266206
+          },
+          "selection_reason": "梁高较小，保留工程取舍"
+        }
+      ],
+      "stop": "已达到确认的改设轮次上限；仅在已授权候选范围内搜索。"
+    }
+  ],
+  "validation": {
+    "full_suite": {
+      "passed": 210,
+      "command": "python -m pytest -q"
+    },
+    "after_layout_refinement": {
+      "passed": 2,
+      "deselected": 15,
+      "command": "python -m pytest tests/test_ui_app.py -k \"report_feedback_search_selection or unsized_search_scope\" -q"
+    },
+    "hosted_model_calls": 0,
+    "independent_existing_check_outputs_match": true,
+    "browser_url": "http://localhost:8522/",
+    "browser_verified": true,
+    "screenshot": "outputs/section_feedback/shortlist_verified.png"
+  }
+}

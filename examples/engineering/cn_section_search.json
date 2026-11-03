@@ -1,0 +1,328 @@
+{
+  "code": "cn-2024",
+  "auto_redesign": true,
+  "max_iterations": 12,
+  "task_type": "new_design",
+  "parameters": {
+    "support_type": {
+      "value": "simply_supported",
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "load_case": {
+      "value": "full_span_udl",
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "section_type": {
+      "value": "rectangular",
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "reinforcement_layers": {
+      "value": 1.0,
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "span_mm": {
+      "value": 6000.0,
+      "unit": "mm",
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "concrete_grade": {
+      "value": "C50",
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "steel_grade": {
+      "value": "HRB500",
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "stirrup_grade": {
+      "value": "HPB300",
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "cover_mm": {
+      "value": 35.0,
+      "unit": "mm",
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "bar_diameter_mm": {
+      "value": 20.0,
+      "unit": "mm",
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "stirrup_diameter_mm": {
+      "value": 8.0,
+      "unit": "mm",
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "stirrup_legs": {
+      "value": 2.0,
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "aggregate_size_mm": {
+      "value": 20.0,
+      "unit": "mm",
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "dead_load_kn_m": {
+      "value": 20.0,
+      "unit": "kN/m",
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "live_load_kn_m": {
+      "value": 5.0,
+      "unit": "kN/m",
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "self_weight_mode": {
+      "value": "excluded",
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "concrete_unit_weight_kn_m3": {
+      "value": 25.0,
+      "unit": "kN/m3",
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "live_quasi_factor": {
+      "value": 0.5,
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "live_combination_factor": {
+      "value": 0.7,
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "live_frequency_factor": {
+      "value": 0.6,
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "importance_factor": {
+      "value": 1.0,
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "design_life_years": {
+      "value": 50.0,
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "safety_class": {
+      "value": 2.0,
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "environment_class": {
+      "value": "I",
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "crack_limit_mm": {
+      "value": 0.3,
+      "unit": "mm",
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "deflection_limit_ratio": {
+      "value": 250.0,
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "end_anchor_length_mm": {
+      "value": 800.0,
+      "unit": "mm",
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "end_anchor_stirrup_spacing_mm": {
+      "value": 100.0,
+      "unit": "mm",
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "top_bar_diameter_mm": {
+      "value": 12.0,
+      "unit": "mm",
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "top_bar_count": {
+      "value": 2.0,
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "side_bar_diameter_mm": {
+      "value": 12.0,
+      "unit": "mm",
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "side_bar_count_per_face": {
+      "value": 2.0,
+      "unit": null,
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "side_bar_spacing_mm": {
+      "value": 180.0,
+      "unit": "mm",
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    },
+    "support_width_mm": {
+      "value": 1200.0,
+      "unit": "mm",
+      "source": "user",
+      "confirmed": false,
+      "raw_value": null,
+      "raw_unit": null,
+      "revision": 1
+    }
+  },
+  "targets": [
+    "flexure",
+    "shear",
+    "detailing",
+    "crack",
+    "deflection"
+  ],
+  "search_diameters_mm": [
+    20,
+    22
+  ],
+  "solution_count": 3,
+  "user_query": "按计算书确认表重建：梁宽、梁高留空，由程序设计；其他条件见参数确认表。允许20/22mm纵筋，最多展示3个通过初筛的方案。",
+  "clarification": []
+}

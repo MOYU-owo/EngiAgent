@@ -1,0 +1,25 @@
+{
+  "date": "2026-11-02",
+  "tests": "181 passed in 21.00s",
+  "live_turns": [
+    {
+      "query": "当前参数是多少，用钢量多少？",
+      "intent": "explain",
+      "answer_source": "model",
+      "answer_characters": 965
+    },
+    {
+      "query": "什么是准永久组合？请用通俗的话解释。",
+      "intent": "explain",
+      "answer_source": "model",
+      "answer_characters": 1005
+    },
+    {
+      "query": "那它为什么会影响裂缝？",
+      "intent": "explain",
+      "answer_source": "model",
+      "answer_characters": 922
+    }
+  ],
+  "screenshot": "outputs/expert_dialogue/screenshots/latex_and_standards.jpg"
+}

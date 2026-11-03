@@ -172,3 +172,52 @@ def test_report_feedback_search_selection_and_calculation_steps():
     assert not at.exception
     assert any('分步计算' in element.value for element in at.markdown)
     assert any('代入：' in element.value for element in at.markdown)
+
+
+def test_review_is_latex_and_formal_references_without_raw_code():
+    at=app('已有梁独立验算')
+    at.button(key='confirm').click().run();at.button(key='run').click().run()
+    at.radio(key='nav').set_value('计算与规范复核').run()
+    assert not at.exception and len(at.get('latex'))>10
+    assert not at.get('json') and not at.get('code')
+    visible=' '.join(item.value for item in at.markdown)+' '.join(item.value for item in at.caption)
+    assert 'docs/' not in visible and 'cn-rc-' not in visible
+    assert '混凝土结构设计标准' in visible
+
+
+def test_unsized_search_scope_is_visible_before_confirmation_and_shortlist_after_run():
+    import runpy
+    from engi_agent.ui.service import WorkbenchSession
+    make=runpy.run_path(str(ROOT/'examples/reproduce_report_feedback.py'))['report_request']
+    r=make();r.parameters.pop('beam_width_mm');r.parameters.pop('beam_depth_mm')
+    r.max_iterations=6;r.solution_count=3;r.search_diameters_mm=[20,22]
+    ctl=WorkbenchSession();ctl.load(r,'截面留空设计')
+    at=AppTest.from_file(str(ROOT/'streamlit_app.py'),default_timeout=30).run()
+    at.session_state['workbench']=ctl;at.run()
+    assert any('250–450' in element.value and '500–800' in element.value for element in at.info)
+    at.button(key='confirm').click().run();at.button(key='run').click().run()
+    assert not at.exception and ctl.result.evaluation.status=='pass'
+    assert len(ctl.result.design_alternatives)==3
+    assert any('剔除支配方案' in element.value for element in at.caption)
+    before=ctl.result.design_revision
+    selected=ctl.result.design_alternatives[-1]['revision']
+    at.selectbox(key='verified_alternative').select(selected).run()
+    at.button(key='select_alternative').click().run()
+    assert not at.exception and ctl.result.design_revision==selected!=before
+
+
+def test_expert_suggestion_fills_without_submitting_and_renders_legacy_math():
+    at=app('已有梁独立验算')
+    at.button(key='confirm').click().run();at.button(key='run').click().run()
+    at.radio(key='nav').set_value('专家咨询').run()
+    ctl=at.session_state['workbench'];calls=len(ctl.calls);runs=ctl.completed_runs
+    suggested=at.button(key='expert_suggestion_0').label
+    at.button(key='expert_suggestion_0').click().run()
+    assert at.text_area(key='expert_query').value==suggested
+    assert len(ctl.calls)==calls and ctl.completed_runs==runs and not ctl.consultations
+    assert not any('离线咨询仅支持' in item.value or 'DeepSeek 会结合' in item.value for item in at.caption)
+    reply=ctl.ask_expert('当前参数是多少')
+    ctl.consultations[-1]['answer']=r'系数 \(\psi\) 与刚度有关。'+'\n'+r'\[B_s=\frac{E_s A_s h_0^2}{1.15\psi+0.2}\]'
+    at.run()
+    assert not at.exception and len(at.get('latex'))>=1
+    assert len(ctl.calls)==calls+1 and ctl.completed_runs==runs

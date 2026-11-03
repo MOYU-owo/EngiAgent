@@ -23,7 +23,7 @@ def run_case(name):
     return session
 
 
-@pytest.mark.parametrize('name',list(CASES)[:-1])
+@pytest.mark.parametrize('name',[name for name in list(CASES)[:-1] if CASES[name] in REFERENCES])
 def test_actual_scenarios_match_existing_json_and_download(name):
     session=run_case(name)
     reference=REFERENCES[CASES[name]]
@@ -61,6 +61,17 @@ def test_height_revision_reuses_real_cache_and_matches_sixth_case():
     assert next(n for n in nodes if n['name']=='load_combination')['action']=='失效重算'
     changed=revision_comparison(session.result,0,1)
     assert any(row['参数']=='梁高' for row in changed)
+
+
+def test_section_search_case_download_retains_search_scope_and_all_attempts():
+    session=run_case('截面与配筋联合设计')
+    assert session.result.evaluation.status=='pass'
+    data=json.loads(session.downloads()['json'])
+    assert len(data['revisions'])==12 and len(data['design_alternatives'])==3
+    assert not data['design_search']['domain']['beam_width_mm']['fixed']
+    assert data['design_search']['filter']['dominated']>=1
+    assert data['candidate']['beam_width_mm']==250 and data['candidate']['beam_depth_mm']==550
+    assert data['tool_results']['evaluation.detailing_check']['outputs']['clear_spacing_mm']==49
 
 
 def test_missing_invalid_and_unconfirmed_are_blocked():

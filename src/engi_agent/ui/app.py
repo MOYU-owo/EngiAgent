@@ -95,7 +95,7 @@ def download_buttons(ctl, key='main'):
 
 def load_panel(ctl):
     with st.expander('需求与案例 · 加载或解析任务',expanded=ctl.draft is None):
-        source=st.selectbox('任务来源',['现有案例模板','上传任务 JSON','自然语言需求'],key='source')
+        source=st.selectbox('任务来源',['现有案例模板','上传任务 JSON','自然语言需求','图片识别 OCR'],key='source')
         chosen=st.selectbox('案例模板',list(CASES),key='case_selector')
         if source=='现有案例模板':
             if st.button('加载案例',key='load_case',width='stretch'):
@@ -108,6 +108,8 @@ def load_panel(ctl):
                     ctl.load(TaskRequest.model_validate_json(uploaded.getvalue()),uploaded.name)
                     st.rerun()
                 except ValueError as exc:st.error(str(exc))
+        elif source=='图片识别 OCR':
+            image_task_panel(ctl, chosen)
         else:
             use_template=st.checkbox('采用上述显式参数模板',value=False)
             st.caption('勾选后使用模板补充未说明的参数。')
@@ -121,6 +123,51 @@ def load_panel(ctl):
                     st.rerun()
                 except ValueError as exc:st.error(str(exc))
         if chosen=='梁高修改与局部重算':st.info('先运行已有梁基准，再将梁高550改为600mm，校验并重新确认。')
+
+
+def image_task_panel(ctl, chosen):
+    from hashlib import sha256
+    from .ocr import recognize_image
+
+    uploaded=st.file_uploader('上传工程需求图片',type=['png','jpg','jpeg','webp','bmp'],key='ocr_upload',max_upload_size=10)
+    data=uploaded.getvalue() if uploaded is not None else None
+    digest=sha256(data).hexdigest() if data else None
+    if st.session_state.get('ocr_upload_digest') != digest:
+        st.session_state.ocr_upload_digest=digest
+        st.session_state.pop('ocr_result',None)
+        st.session_state.pop('ocr_text',None)
+    if st.button('识别图片文字',disabled=data is None,key='ocr_recognize',width='stretch'):
+        try:
+            with st.spinner('正在调用 DeepSeek 视觉模型识别图片…'):
+                result=recognize_image(data)
+            st.session_state.ocr_result=result.evidence()
+            st.session_state.ocr_text=result.text
+        except (ValueError, RuntimeError) as exc:
+            st.session_state.pop('ocr_result',None)
+            st.session_state.pop('ocr_text',None)
+            st.error(str(exc))
+    result=st.session_state.get('ocr_result')
+    if not result:return
+    with st.expander('查看原图'):
+        st.image(data,width='stretch')
+    if result.get('model') is None:
+        st.info('识别方式已更新，请重新调用 DeepSeek 识别图片。')
+        return
+    st.success('DeepSeek 已生成任务描述。')
+    for item in result.get('uncertainties',[]):st.warning('待核对：'+item)
+    query=st.text_area('识别后的任务描述 · 可修改',key='ocr_text',height=220)
+    extra=st.text_area('补充任务要求',placeholder='例如：请新设计这根梁；或仅复核已有配筋。',key='ocr_extra',height=80)
+    st.caption('请核对尺寸、单位、钢筋牌号与直径，以及模型标出的待核对项。')
+    use_template=st.checkbox('使用案例模板补充未说明参数',value=False,key='ocr_template')
+    live=st.session_state.execution_mode.startswith('DeepSeek')
+    if not live:st.info('图片识别通过 DeepSeek 云端调用；任务分派需在运行设置中选择 DeepSeek 模式。')
+    if st.button('将识别文本交给 Dispatcher',key='ocr_dispatch',disabled=not query.strip() or not live,width='stretch'):
+        try:
+            with st.spinner('正在解析图片任务并提取参数…'):
+                ctl.parse(query+('\n补充要求：'+extra if extra.strip() else ''),
+                          load_case(chosen) if use_template else None,image_evidence=result)
+            st.rerun()
+        except ValueError as exc:st.error(str(exc))
 
 
 def parameters_panel(ctl):
@@ -137,15 +184,16 @@ def parameters_panel(ctl):
             col1,col2=st.columns([1.2,1])
             auto=col1.toggle('有限自动改设',value=state.request.auto_redesign if task_type=='new_design' else False,
                              disabled=task_type!='new_design',key=f'auto_{g}',on_change=ctl.mark_dirty)
-            limit=col2.number_input('最多轮次',min_value=1,max_value=10,value=state.request.max_iterations,
+            limit=col2.number_input('最多轮次',min_value=1,max_value=40,value=state.request.max_iterations,
                                    disabled=not auto,key=f'rounds_{g}',on_change=ctl.mark_dirty)
         st.caption(('新方案设计' if task_type=='new_design' else '已有梁验算')+' · '+'、'.join(LABELS[t] for t in (ALL_TARGETS if task_type=='new_design' else targets)))
         search_diameters=st.multiselect('允许搜索的纵筋直径 / mm',REBAR_DIAMETERS,default=state.request.search_diameters_mm,
             disabled=task_type!='new_design' or not auto,key=f'search_diameters_{g}',on_change=ctl.mark_dirty,
             help='留空时固定使用输入直径。')
-        solutions=st.number_input('期望通过候选数',min_value=1,max_value=3,value=state.request.solution_count,
+        solutions=st.number_input('最多展示方案数',min_value=1,max_value=3,value=state.request.solution_count,
             disabled=task_type!='new_design' or not auto,key=f'solutions_{g}',on_change=ctl.mark_dirty,
-            help='在最多轮次内搜索，按已通过候选的纵筋面积推荐。')
+            help='最多展示此数量；先去重和剔除明显劣势方案，再保留材料用量、梁高及验算裕量有取舍的方案。')
+        st.caption('梁宽、梁高填值即固定；留空则由程序初选并调整。可在几何参数中填写最大梁宽、最大梁高。变更后请校验并查看确认范围。')
         if task_type=='new_design' and not auto:
             st.caption('自动改设已关闭，仅尝试一个候选方案。')
         with st.expander('参数来源与支持规格'):
@@ -189,6 +237,10 @@ def parameters_panel(ctl):
         if ctl.stage == 'validated':
             with st.expander('确认前核对 · 全部采用值、来源与假定', expanded=True):
                 st.dataframe(audit_rows(state), hide_index=True, width='stretch', height=260)
+                if state.request.task_type=='new_design':
+                    from engi_agent.engineering.design_search import search_domain, domain_text
+                    params={k:parameter_python(k,v) for k,v in state.request.parameters.items()}
+                    if 'span_mm' in params:st.info('截面设计范围：'+domain_text(search_domain(params)))
                 st.caption('设计假定：50年、二级、一类环境、理想铰支、充分受拉直锚。')
         hints = {'editing':'下一步：填写并校验参数。', 'validated':'下一步：核对采用值后，点击确认参数。',
                  'confirmed':'下一步：运行任务。', 'completed':'计算已完成。修改参数后可创建下一轮修订。'}
@@ -233,11 +285,22 @@ def summary(state):
     else:st.warning('检查不完整 · 未形成通过结论')
     if state.search_stop_reason:st.caption('设计搜索：'+state.search_stop_reason)
     if state.design_alternatives:
-        st.markdown('**已通过候选**')
-        st.dataframe([{'修订':r['revision'],'纵筋':str(r['candidate']['bar_count'])+'Φ'+str(r['candidate']['bar_diameter_mm']),
-            '截面/mm':str(r['candidate']['beam_width_mm'])+'×'+str(r['candidate']['beam_depth_mm']),
-            '纵筋面积/mm²':r['candidate']['As_mm2'],'当前选用':r['revision']==state.design_revision,'全部请求检查':all(r['checks'].values())}
+        st.markdown('**筛选后的已通过候选**')
+        st.dataframe([{'方案':'修订 '+str(r['revision'])+(' · 当前' if r['revision']==state.design_revision else ''),
+            '截面/mm · 纵筋':number(r['candidate']['beam_width_mm'])+'×'+number(r['candidate']['beam_depth_mm'])+' · '+str(r['candidate']['bar_count'])+'Φ'+number(r['candidate']['bar_diameter_mm']),
+            '受拉纵筋/mm²':number(r['candidate']['As_mm2']),
+            '混凝土/m³':number(r.get('metrics',{}).get('concrete_m3'),3),
+            '控制利用率':number(r.get('metrics',{}).get('governing_utilization'),3)}
             for r in state.design_alternatives],hide_index=True,width='stretch')
+    filtering=state.design_search.get('filter')
+    if filtering:
+        st.caption(f"尝试 {filtering['tested']} 轮 · 通过 {filtering['passed']} 轮 · 去重 {filtering['duplicates']} 项 · 剔除支配方案 {filtering['dominated']} 项 · 展示 {filtering['displayed']} 项")
+        with st.expander('方案初筛与推荐依据'):
+            st.write(filtering['rule'])
+            for option in state.design_alternatives:
+                st.write('修订 '+str(option['revision'])+'：'+option.get('selection_reason','已通过候选'))
+            st.caption('推荐采用混凝土体积与受拉纵筋面积的等权相对指标；控制利用率越低，所列验算裕量越大。')
+            st.caption(filtering['limitation'])
     rows=result_rows(state)
     tiles=[]
     for row in rows:
@@ -285,8 +348,10 @@ def workbench(ctl):
             if is_current:
                 summary(ctl.result)
                 if len(ctl.result.design_alternatives)>1:
-                    selected=st.selectbox('工程师选择已验证候选',[r['revision'] for r in ctl.result.design_alternatives],
-                        format_func=lambda r:'修订 '+str(r),key='verified_alternative')
+                    labels={r['revision']:f"修订 {r['revision']} · {number(r['candidate']['beam_width_mm'])}×{number(r['candidate']['beam_depth_mm'])} · {r['candidate']['bar_count']}Φ{number(r['candidate']['bar_diameter_mm'])}"
+                            for r in ctl.result.design_alternatives}
+                    selected=st.selectbox('工程师选择已验证候选',list(labels),
+                        format_func=lambda r:labels[r],key='verified_alternative')
                     if st.button('选用此已验证方案',key='select_alternative'):
                         ctl.select_design_alternative(selected);st.rerun()
                 download_buttons(ctl)
@@ -342,7 +407,7 @@ def tool_details(name, result):
         from .projections import label
         rows=[]
         for key,value in result.inputs.get('parameters',{}).items():
-            if value is not None:
+            if value is not None and label(key)!=key:
                 rows.append({'参数':label(key),'采用值':ENUMS.get(value,str(value)) if isinstance(value,str) else number(value,6)})
         if rows:st.dataframe(rows,hide_index=True,width='stretch')
         for assumption in result.outputs.get('assumptions',[]):st.write('· '+assumption)
@@ -360,7 +425,6 @@ def review(ctl):
         summary(state)
         with st.expander('适用范围与未覆盖项目'):
             st.caption('规范检查：'+state.evaluation.code_status+' ｜ 完整工程审查：'+VERDICTS[state.evaluation.overall_status])
-            st.caption('计算配置：'+state.profile.version)
             for item in state.evaluation.unimplemented:st.caption('未覆盖：'+item)
         download_buttons(ctl,'review')
     targets=[t for t in state.request.targets if t in TARGET_TOOLS]
@@ -467,14 +531,23 @@ def planning(ctl):
                 st.json(state.revisions[idx]['evaluation'])
 
 
+def fill_expert_question(question):
+    st.session_state['expert_query']=question
+
+
 def expert(ctl):
     from engi_agent.engineering.consultation import ConsultationReply, basis_hash
     state=require_result(ctl)
     if state is None:return
+    from .expert_content import answer_blocks, suggested_questions
+    suggestions=suggested_questions(state,ctl.consultations)
+    columns=st.columns(len(suggestions))
+    for index,(column,question) in enumerate(zip(columns,suggestions)):
+        column.button(question,key=f'expert_suggestion_{index}',width='stretch',
+                      on_click=fill_expert_question,args=(question,))
     query=st.text_area('向工程专家提问',key='expert_query',height=100,
-        placeholder='例如：为什么强度通过仍可能挠度超限？／梁高改为600mm／活载改为6kN/m')
+                       placeholder='输入问题，或选择上方建议')
     live=st.session_state.execution_mode.startswith('DeepSeek')
-    st.caption('DeepSeek 会结合当前实配方案和最近问答回答；明确修改仍需确认后验算。' if live else '离线咨询仅支持有限解释和明确修改；工程通识及连续对话请选择 DeepSeek 模式。')
     if st.button('提交咨询',key='ask_expert',disabled=ctl.stage!='completed' or not query.strip(),type='primary'):
         try:
             with st.spinner('正在核对当前结果与问题…'):ctl.ask_expert(query,'DeepSeek' if live else 'offline')
@@ -497,7 +570,10 @@ def expert(ctl):
                     except ValueError as exc:st.error(str(exc))
                 if reply.applied:st.success('建议已写入草稿，请回到设计工作台确认后运行。')
             answer=reply.answer or '\n\n'.join(item.text for item in reply.evidence)
-            if answer:st.markdown(answer)
+            if answer:
+                for kind,content in answer_blocks(answer):
+                    if kind=='latex':st.latex(content)
+                    else:st.markdown(content)
             for item in reply.evidence:
                 with st.expander('查看依据 · '+item.title):
                     if item.tool:

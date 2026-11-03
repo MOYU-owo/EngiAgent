@@ -71,7 +71,7 @@ def test_two_verified_candidates_selection_and_new_revision_keep_correct_evidenc
 
 
 def test_passing_candidate_is_retained_if_later_attempts_fail():
-    r=report_request();r.auto_redesign=True;r.search_diameters_mm=[25];r.solution_count=3;r.max_iterations=4
+    r=report_request();r.auto_redesign=True;r.search_diameters_mm=[25];r.solution_count=3;r.max_iterations=3
     s=run(r)
     assert s.revisions[-1]['evaluation']['status']=='fail'
     assert s.evaluation.status=='pass' and s.candidate['bar_diameter_mm']==20

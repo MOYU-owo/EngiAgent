@@ -17,7 +17,7 @@ from engi_agent.engineering.cn_presentation import markdown_report
 
 ROOT = Path(__file__).resolve().parents[3]
 CASES = {
-    '完整新方案设计': 'cn_design', '已有梁独立验算': 'cn_existing',
+    '完整新方案设计': 'cn_design', '截面与配筋联合设计': 'cn_section_search', '已有梁独立验算': 'cn_existing',
     '仅抗弯局部验算': 'cn_flexure_only', '挠度超限后有限改设': 'cn_redesign',
     '改设达到上限停止': 'cn_no_solution', '梁高修改与局部重算': 'cn_existing',
 }
@@ -116,10 +116,14 @@ class WorkbenchSession:
         if record_read:
             self.calls.append(AgentCall('Dispatcher', 'structured_file', {'case': name}, request.model_dump(), 'success'))
 
-    def parse(self, query: str, base: TaskRequest | None = None, roles=None):
+    def parse(self, query: str, base: TaskRequest | None = None, roles=None, *, image_evidence=None):
         if not query.strip(): raise ValueError('请先输入自然语言需求。')
         self.stage, self.errors = 'parsing', []
         calls: list[AgentCall] = []
+        if image_evidence is not None:
+            calls.append(AgentCall('VisionOCR', 'DeepSeek',
+                                   {'image_sha256': image_evidence['image_sha256']},
+                                   image_evidence, 'success'))
         try:
             client = RecordingRoles(roles or DeepSeekRoles(), calls, 'DeepSeek')
             parsed = client.parse('按中国规范cn-2024提取任务。'+query)
@@ -130,6 +134,8 @@ class WorkbenchSession:
             parsed.user_query = query
             self.load(parsed, '自然语言任务', record_read=False)
             self.calls = calls
+            if image_evidence is not None:
+                self.case_name = '图片识别任务'
         except Exception as exc:
             self.stage = 'error'
             self.errors = ['任务解析失败（'+type(exc).__name__+'）；未确认或执行工程计算。']

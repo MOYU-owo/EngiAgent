@@ -36,6 +36,14 @@ button, input, textarea {font-family:inherit!important;}
 button {min-height:40px; transition:background-color .15s, border-color .15s;}
 button:not(:disabled), [role="tab"], summary {cursor:pointer;}
 button[kind="primary"] {font-weight:650;}
+[class*="st-key-expert_suggestion_"] button {
+  min-height:68px; height:auto; justify-content:flex-start; text-align:left;
+}
+[class*="st-key-expert_suggestion_"] button [data-testid="stMarkdownContainer"],
+[class*="st-key-expert_suggestion_"] button p {
+  white-space:normal!important; overflow:visible!important; text-overflow:clip!important;
+  -webkit-line-clamp:unset!important; overflow-wrap:anywhere; line-height:1.5;
+}
 button:focus-visible, input:focus-visible, textarea:focus-visible,
 [role="tab"]:focus-visible, summary:focus-visible, a:focus-visible {
   outline:3px solid #2563eb!important; outline-offset:3px;
