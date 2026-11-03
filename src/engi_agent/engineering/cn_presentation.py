@@ -279,6 +279,9 @@ def confirmation_text(state, markdown=False):
         from .cn_schema import parameter_python
         params = {k:parameter_python(k,v) for k,v in state.request.parameters.items()}
         lines += [domain_text(search_domain(params))]
+    if state.request.preference_guidance and state.request.preference_snapshot:
+        pref=state.request.preference_snapshot
+        lines += [f'偏好引导开启：来源{pref.source}，版本{pref.version}，权重{pref.weights}；固定归一化{pref.normalization}。评分仅为设计偏好，不代替验算。']
     if state.missing_parameters: lines += ['缺失：'+'、'.join(CN_FIELDS.get(k,FIELDS.get(k,(k,))[0]) for k in state.missing_parameters)]
     return ('\n\n' if markdown else '\n').join(lines)
 

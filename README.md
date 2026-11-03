@@ -59,6 +59,8 @@ python run.py --base-request examples/engineering/cn_design.json --query "新设
 
 ## 模型配置
 
+新增最小[工程师偏好学习驱动设计](docs/preference_learning.md)：在原工作台中成对评价已通过候选，使用本地JSON保存真实/模拟独立权重，开关控制偏好邻域搜索；默认仍用原规则。演示：`python examples/preference_demo.py`。不修改CN公式、DAG，不新增Agent；云端多人部署前需升级并发与身份隔离存储。
+
 离线运行不需要密钥。使用真实 DeepSeek 时，将 `.env.example` 的配置写入本机 `.env`：
 
 ```dotenv

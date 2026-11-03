@@ -34,13 +34,40 @@ def domain_text(domain):
 
 
 class CandidateSearch:
-    def __init__(self, parameters, diameters):
+    def __init__(self, parameters, diameters, preference=None):
         self.base = parameters.copy()
         self.domain = search_domain(parameters)
         self.diameters = list(dict.fromkeys([parameters['bar_diameter_mm'], *diameters]))
         self.queue = []
         self.seen = set()
         self.sequence = 0
+        self.preference=preference
+        self.anchors={}
+        self.anchor_keys={}
+        self.selection_trace=[]
+        self.guided_steps=0
+
+    def observe(self,revision):
+        if self.preference and revision['evaluation']['status']=='pass':
+            from .preferences import verified
+            item=verified(revision,self.base['span_mm'])
+            self.anchors[item['id']]=(item,revision)
+
+    def preference_neighbours(self):
+        from .preferences import score
+        item,revision=min(self.anchors.values(),key=lambda pair:score(pair[0],self.preference))
+        p={**revision['parameters'],**{k:v for k,v in revision['candidate'].items() if k in self.base or k in self.domain}}
+        n=revision['candidate']['bar_count']
+        variants=[({},n+1),({},max(2,n-1))]
+        for k,delta in [('beam_width_mm',25),('beam_depth_mm',25)]:
+            variants.extend([({k:p[k]+delta},2),({k:p[k]-delta},2)])
+        variants.extend([({'bar_diameter_mm':d},2) for d in self.diameters])
+        for changes,count in variants:
+            candidate={**self.base,**{k:p[k] for k in self.domain},'bar_diameter_mm':p['bar_diameter_mm'],**changes}
+            key=self.key(candidate,count)
+            self.add(candidate,count,'已通过修订'+str(revision['revision'])+'的偏好邻域；新候选仍需完整验算',3)
+            if any(self.key(entry[2],entry[3])==key for entry in self.queue):
+                self.anchor_keys[key]=item
 
     def initial(self):
         return {**self.base, **{k: v['initial_mm'] for k, v in self.domain.items()}}
@@ -103,8 +130,23 @@ class CandidateSearch:
                 delta = 25 if key == 'beam_width_mm' else 50
                 value = min(p[key]+delta, math.floor(self.domain[key]['maximum_mm']/25)*25)
                 offer({key: value}, 2, f'比较不同截面：{key}={value:g}mm', 3)
+        if self.preference and self.anchors:self.preference_neighbours()
         if self.queue:
-            _, _, params, n, reason = heapq.heappop(self.queue)
+            mode='rule';anchor=None
+            if self.preference and self.anchors:
+                from .preferences import score
+                self.guided_steps+=1
+                options=[(i,e,self.anchor_keys[self.key(e[2],e[3])]) for i,e in enumerate(self.queue) if self.key(e[2],e[3]) in self.anchor_keys]
+                if options and self.guided_steps%4!=0:
+                    i,entry,anchor=min(options,key=lambda x:(score(x[2],self.preference),x[1][0],x[1][1]))
+                    self.queue.pop(i);heapq.heapify(self.queue);mode='preference_neighbour'
+                else:entry=heapq.heappop(self.queue);mode='rule_exploration'
+            else:entry=heapq.heappop(self.queue)
+            _, _, params, n, reason = entry
+            self.selection_trace.append(dict(mode=mode,parameters=params.copy(),minimum_bar_count=n,
+                anchor_revision=anchor['revision'] if anchor else None,
+                verified_anchor_features=anchor['features'] if anchor else None,
+                anchor_score=score(anchor,self.preference) if anchor else None))
             return params, n, reason
         return None
 

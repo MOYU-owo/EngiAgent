@@ -624,7 +624,10 @@ def main():
     ctl=current()
     sidebar(ctl);header(ctl)
     page=st.session_state.nav
-    if page==PAGES[0]:workbench(ctl)
+    if page==PAGES[0]:
+        workbench(ctl)
+        from .preference_panel import preference_panel
+        preference_panel(ctl)
     elif page==PAGES[1]:review(ctl)
     elif page==PAGES[2]:planning(ctl)
     elif page=='专家咨询':expert(ctl)

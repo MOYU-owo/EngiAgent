@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from .preferences import PreferenceSnapshot
 
 
 class Contract(BaseModel):
@@ -148,6 +149,8 @@ class TaskRequest(Contract):
     targets: list[Target] = Field(default_factory=lambda: ["flexure", "shear", "detailing", "crack", "deflection"])
     search_diameters_mm: list[int] = Field(default_factory=list, max_length=8)
     solution_count: int = Field(default=1, ge=1, le=3)
+    preference_guidance: bool = False
+    preference_snapshot: PreferenceSnapshot | None = None
     user_query: str = ""
     clarification: list[str] = Field(default_factory=list)
 

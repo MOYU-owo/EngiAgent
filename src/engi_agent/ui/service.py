@@ -89,6 +89,7 @@ class WorkbenchSession:
     completed_runs: int = 0
     executed_mode: str | None = None
     consultations: list[dict] = field(default_factory=list)
+    preference_comparison: dict = field(default_factory=dict)
 
     def mark_dirty(self):
         if self.stage != 'running':
@@ -303,3 +304,32 @@ class WorkbenchSession:
             'audit': json.dumps({'calls':[vars(c) for c in self.calls], 'runs':self.audit_runs,
                                  'consultations':self.consultations},ensure_ascii=False,indent=2).encode('utf-8'),
         }
+
+    def configure_preference(self,enabled,source='real'):
+        from engi_agent.engineering.preferences import PreferenceStore
+        if self.draft is None:raise ValueError('先加载任务')
+        r=self.draft.request.model_copy(deep=True)
+        r.preference_guidance=enabled
+        r.preference_snapshot=PreferenceStore(source).load()[0] if enabled else None
+        fresh=prepare(r)
+        fresh.cache=self.draft.cache.copy();fresh.revisions=self.draft.revisions.copy()
+        fresh.design_revision=self.draft.design_revision
+        self.draft=fresh;self.stage='validated' if not fresh.missing_parameters else 'editing'
+        self.editor_generation+=1
+
+    def compare_preferences(self,source='real'):
+        from engi_agent.engineering.preferences import PreferenceStore,pool,score
+        if not self.result or self.result.request.task_type!='new_design':raise ValueError('请先完成新设计')
+        snapshot=PreferenceStore(source).load()[0]
+        results={}
+        for name,enabled in [('off',False),('on',True)]:
+            r=self.result.request.model_copy(deep=True)
+            r.auto_redesign=True;r.preference_guidance=enabled;r.preference_snapshot=snapshot if enabled else None
+            # Independent empty caches and identical confirmed inputs/budgets.
+            state=run_engineering(confirm(prepare(r)),ProgramRoles())
+            items=pool(state)
+            results[name]=dict(state=state.model_dump(),metrics=dict(
+                tested=len(state.revisions),passed=sum(h['evaluation']['status']=='pass' for h in state.revisions),
+                unique_passed=len(items),best_score=min((score(i,snapshot) for i in items),default=None)))
+        self.preference_comparison=dict(source=source,snapshot=snapshot.model_dump(),results=results)
+        return self.preference_comparison

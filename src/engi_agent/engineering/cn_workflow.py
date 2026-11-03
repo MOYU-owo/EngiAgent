@@ -94,6 +94,8 @@ def confirm(state):
         raise ValueError('新设计须由确认的恒活载计算内力；直接内力仅用于已有梁验算')
     if fresh.request.auto_redesign and fresh.request.task_type != 'new_design':
         raise ValueError('已有梁独立验算不会自动改变用户配筋，请创建新设计任务')
+    if fresh.request.preference_guidance and (fresh.request.task_type!='new_design' or not fresh.request.auto_redesign or fresh.request.preference_snapshot is None):
+        raise ValueError('偏好引导需要开启自动改设的新设计及已加载偏好快照')
     for v in fresh.request.parameters.values(): v.confirmed = True
     fresh.confirmed = True; fresh.confirmation_hash = stamp(fresh)
     # Preserve earlier trace/cache, but never preserve an earlier pass conclusion.
@@ -205,7 +207,8 @@ def run_engineering(state, roles, on_event=None):
         return reject('参数或假设未确认，拒绝计算')
     if not isinstance(state.profile, CNProfile): return reject('中国规范任务与计算配置不匹配')
     base = {k: parameter_python(k,v) for k,v in state.request.parameters.items()}
-    search = CandidateSearch(base, state.request.search_diameters_mm) if state.request.task_type == 'new_design' else None
+    search = CandidateSearch(base, state.request.search_diameters_mm,
+        state.request.preference_snapshot if state.request.preference_guidance else None) if state.request.task_type == 'new_design' else None
     if search:
         base = search.initial()
         search.seen.add(search.key(base, 2))
@@ -260,6 +263,7 @@ def run_engineering(state, roles, on_event=None):
                                 evaluation=s.evaluation.model_dump(), parameters=context['parameters'].copy(),
                                 tools={k:v.model_dump() for k,v in s.tool_results.items()},
                                 trace=[t.copy() for t in s.plan_trace if t['revision']==s.design_revision]))
+        if search:search.observe(s.revisions[-1])
         return {'state':s}
 
     def next_step(data):
@@ -274,7 +278,7 @@ def run_engineering(state, roles, on_event=None):
         passed = sum(r['evaluation']['status'] == 'pass' for r in s.revisions[start_revision:])
         free_section = any(not v['fixed'] for v in search.domain.values())
         verified, _ = shortlist(s.revisions[start_revision:], base['span_mm'], s.request.solution_count)
-        if len(verified) >= s.request.solution_count and not free_section:
+        if len(verified) >= s.request.solution_count and not free_section and not s.request.preference_guidance:
             s.search_stop_reason = '已获得确认数量的通过候选。'
             return END
         if context['iteration'] >= s.request.max_iterations:
@@ -309,6 +313,9 @@ def run_engineering(state, roles, on_event=None):
             attempts = final.revisions[start_revision:]
             final.design_alternatives, filtering = shortlist(attempts, base['span_mm'], final.request.solution_count)
             final.design_search['filter'] = filtering
+            final.design_search['preference_guidance']=final.request.preference_guidance
+            final.design_search['preference_snapshot']=final.request.preference_snapshot.model_dump() if final.request.preference_guidance else None
+            final.design_search['selection_trace']=search.selection_trace
             if final.design_alternatives:
                 chosen_id = final.design_alternatives[0]['revision']
                 chosen = next(r for r in attempts if r['revision'] == chosen_id)
