@@ -25,6 +25,9 @@ ocr = ["httpx>=0.27,<1", "Pillow>=10,<13"]
 where = ["src"]
 namespaces = false
 
+[tool.setuptools.package-data]
+engi_agent = ["ui/landing_assets/*.css", "ui/landing_assets/*.js"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"

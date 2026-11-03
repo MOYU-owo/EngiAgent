@@ -94,7 +94,9 @@ class CandidateSearch:
         failed = [k for k, v in state.evaluation.checks.items() if not v]
         detail = state.tool_results.get('evaluation.detailing_check')
         reasons = detail.outputs.get('reasons', []) if detail else []
-        prefix = ('未通过：' + '、'.join(failed)) if failed else '继续比较已授权的不同方案'
+        labels = {'flexure':'抗弯','shear':'抗剪','detailing':'构造','crack':'裂缝','deflection':'挠度'}
+        prefix = ('未通过：' + '、'.join(labels.get(k,k) for k in failed)) if failed else '继续比较已授权的不同方案'
+        if reasons:prefix += '（'+'；'.join(reasons)+'）'
         if not c:
             failures = [e for r in state.tool_results.values() for e in r.errors if r.status == 'failed']
             prefix = '设计未形成候选：'+'；'.join(failures)
@@ -119,9 +121,14 @@ class CandidateSearch:
             h = min(p['beam_depth_mm']+50, math.floor(self.domain['beam_depth_mm']['maximum_mm']/25)*25)
             priority = 4 if failed == ['crack'] else 1
             offer({'beam_depth_mm': h}, 2, f'尝试增加梁高至{h:g}mm，重新确定配筋', priority)
-        for d in self.diameters if passed or layout or not c else []:
+        # A detailing failure can depend on diameter even when spacing is fine
+        # (e.g. transverse reinforcement in the anchorage region). Always offer
+        # authorized alternatives for detailing failures as well, without
+        # changing the existing flexure/serviceability repair priorities.
+        for d in self.diameters if passed or 'detailing' in failed or not c else []:
             if d != p['bar_diameter_mm']:
-                offer({'bar_diameter_mm': d}, 2, f'切换确认目录中的直径{d}mm', 2 if passed or layout else 4)
+                priority = 0 if 'detailing' in failed and not layout else 2 if passed or layout else 4
+                offer({'bar_diameter_mm': d}, 2, f'尝试已允许的直径{d}mm，按新直径重新计算根数', priority)
         # More steel cannot fix insufficient spacing, anchors, cover or side bars.
         if c and not layout and (passed or ('detailing' not in failed and failed)):
             offer({}, count+1, f'纵筋至少{count+1}根', 2 if failed == ['crack'] else 3)

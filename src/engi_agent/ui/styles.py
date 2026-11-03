@@ -30,6 +30,7 @@ CSS = '''
 .block-container {max-width:1640px; padding:2.1rem 2rem 3rem;}
 [data-testid="stHeader"] {background:transparent;}
 [data-testid="stSidebar"] {min-width:232px; max-width:232px; border-right:1px solid var(--ea-border);}
+[data-testid="stSidebar"][data-collapsed="true"] {min-width:0; max-width:0; width:0!important; border-right:0;}
 [data-testid="stSidebarUserContent"] {padding:1.5rem 1.1rem;}
 [data-testid="stSidebar"] [role="radiogroup"] {gap:6px;}
 [data-testid="stSidebar"] [role="radiogroup"] label {padding:7px 9px; border-radius:6px;}
@@ -89,6 +90,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible,
 .result-tile p {font-size:13px; color:var(--ea-muted); line-height:1.65; margin:0; font-variant-numeric:tabular-nums;}
 .empty-state {padding:28px 8px;}
 .empty-state p {color:var(--ea-muted); line-height:1.8;}
+[data-testid="stMain"] {scroll-behavior:smooth;}
+.block-container:has(.ea-native-home) {max-width:none; padding:3rem 0 3rem;}
+.st-key-calculation_workspace {max-width:1640px; margin:0 auto; padding:2.4rem 2rem 0;}
+.ea-workbench-anchor, .ea-about {scroll-margin-top:4rem;}
+.ea-about {max-width:900px; margin:4rem 0 0; padding:2rem 0;}
+.ea-about p {font-size:16px; line-height:1.8; color:var(--ea-muted);}
+.ea-about a {display:inline-block; min-height:44px; line-height:44px; color:var(--ea-ink); text-underline-offset:5px;}
 @media (max-width:1100px) {
   [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-card_parameters),
   [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-card_start) {flex-direction:column;}
@@ -97,6 +105,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible,
 }
 @media (max-width:768px) {
   .block-container {padding:4rem 1rem 2rem;}
+  .block-container:has(.ea-native-home) {padding:3rem 0 2rem;}
+  .st-key-calculation_workspace {padding:2rem 1rem 0;}
   h1 {font-size:1.5rem!important;}
   .workflow-steps {grid-template-columns:repeat(2,minmax(0,1fr));}
   [data-testid="stHorizontalBlock"] {flex-wrap:wrap;}

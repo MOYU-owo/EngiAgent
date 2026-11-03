@@ -1,7 +1,6 @@
 """Streamlit workbench. All computation is dispatched through service.py."""
 from __future__ import annotations
 import html
-import json
 from typing import get_args
 import streamlit as st
 
@@ -17,7 +16,7 @@ from .diagrams import beam_svg, dag_dot, agent_dot
 from .formulas import FORMULAS, NOTES
 from .styles import CSS
 
-PAGES=['设计工作台','计算与规范复核','Agent 与动态规划','专家咨询','对照实验']
+PAGES=['设计工作台','计算与规范复核','Agent 与动态规划','专家咨询']
 
 
 
@@ -50,7 +49,9 @@ def header(ctl):
     left,right=st.columns([3,2],vertical_alignment='center')
     with left:
         st.markdown('<div class="eyebrow">中国规范 RC 梁 · 工程工作台</div>',unsafe_allow_html=True)
-        st.title(st.session_state.get('nav',PAGES[0]))
+        title=st.session_state.get('nav',PAGES[0])
+        if title==PAGES[0]:st.header(title)
+        else:st.title(title)
     with right:
         state=ctl.draft
         status=VERDICTS[ctl.result.evaluation.status] if ctl.stage=='completed' and ctl.result else STAGES[ctl.stage]
@@ -587,48 +588,25 @@ def expert(ctl):
 
 
 
-def experiments():
-    from engi_agent.engineering.experiments import run_mechanism_experiment, experiment_markdown
-    st.markdown('### 工程依赖与缓存 · 同内核机制对照')
-    st.caption('20种目标/修改组合，对比全量无缓存、按目标无缓存、按目标缓存。')
-    if st.button('运行机制对照实验',key='run_mechanism'):
-        with st.spinner('正在执行真实工具并逐项核对输出…'):
-            st.session_state.mechanism_record=run_mechanism_experiment()
-    record=st.session_state.get('mechanism_record')
-    if record:
-        st.success('机制对照已实际执行 · '+str(record['case_count'])+'种组合')
-        names={'full':'全量无缓存','dag':'按目标无缓存','dag_cache':'按目标与有效缓存'}
-        st.dataframe([{'执行组':names[r['group']],'运行次数':r['runs'],
-                       '实际执行节点合计':r['executed_total'],'复用合计':r['reused_total'],
-                       '单次耗时中位数/s':r['median_wall_seconds'],'请求项输出一致':r['all_equal_to_full']}
-                      for r in record['summary']],hide_index=True,width='stretch')
-        with st.expander('实验范围'):
-            for item in record['limitations']:st.caption(item)
-        a,b=st.columns(2)
-        a.download_button('下载机制实验 JSON',json.dumps(record,ensure_ascii=False,indent=2),
-                          'mechanism_ablation.json','application/json',on_click='ignore')
-        b.download_button('下载机制实验报告',experiment_markdown(record),
-                          'mechanism_ablation.md','text/markdown',on_click='ignore')
-    else:st.info('机制对照尚未在本会话运行。')
-    with st.container(border=True,key='card_experiment'):
-        st.markdown('### 统一案例对照 · 后续扩展')
-        st.info('正式对照实验未执行')
-        st.dataframe([{'执行组':label,'状态':'未执行','结果证据':'尚未提供'} for label in ('人工设计','通用 LLM','固定 Python 流程','EngiAgent 对照组')],hide_index=True,width='stretch')
-        with st.expander('对照实验方案'):
-            st.markdown((ROOT/'docs/cn_experiment_protocol.md').read_text(encoding='utf-8'))
-
-
 def main():
-    st.set_page_config(page_title='EngiAgent · RC 梁工程工作台',page_icon='▰',layout='wide')
+    st.set_page_config(page_title='EngiAgent · RC 梁工程工作台',page_icon='▰',layout='wide',initial_sidebar_state='collapsed')
     st.markdown(CSS,unsafe_allow_html=True)
     ctl=current()
-    sidebar(ctl);header(ctl)
+    if st.session_state.get('nav') not in PAGES:st.session_state.nav=PAGES[0]
+    sidebar(ctl)
     page=st.session_state.nav
     if page==PAGES[0]:
-        workbench(ctl)
-        from .preference_panel import preference_panel
-        preference_panel(ctl)
-    elif page==PAGES[1]:review(ctl)
-    elif page==PAGES[2]:planning(ctl)
-    elif page=='专家咨询':expert(ctl)
-    else:experiments()
+        from .landing import cover,about
+        cover()
+        with st.container(key='calculation_workspace'):
+            st.markdown('<div id="engineering-workbench" class="ea-workbench-anchor"></div>',unsafe_allow_html=True)
+            header(ctl)
+            workbench(ctl)
+            from .preference_panel import preference_panel
+            preference_panel(ctl)
+            about()
+    else:
+        header(ctl)
+        if page==PAGES[1]:review(ctl)
+        elif page==PAGES[2]:planning(ctl)
+        elif page=='专家咨询':expert(ctl)

@@ -28,7 +28,7 @@ def test_web_five_cases_and_navigation_never_reexecute(case):
     assert ctl.result.evaluation.status==('fail' if case=='改设达到上限停止' else 'pass')
     calls=len(ctl.calls)
     assert at.button(key='run').disabled
-    for page in ('计算与规范复核','Agent 与动态规划','专家咨询','对照实验','设计工作台'):
+    for page in ('计算与规范复核','Agent 与动态规划','专家咨询','设计工作台'):
         at.radio(key='nav').set_value(page).run()
         assert not at.exception
         assert len(at.session_state['workbench'].calls)==calls
@@ -56,14 +56,13 @@ def test_web_height_edit_requires_validation_confirmation_and_reuses():
     assert next(t for t in final.plan_trace if t['tool']=='materials')['action']=='reuse'
 
 
-def test_web_pending_graph_and_experiment_are_truthful():
+def test_web_pending_graph_and_removed_experiment_navigation():
     at=app('仅抗弯局部验算')
     at.radio(key='nav').set_value('Agent 与动态规划').run()
     assert not at.exception
     assert at.session_state['workbench'].result is None
-    at.radio(key='nav').set_value('对照实验').run()
-    assert not at.exception
-    assert any('未执行' in alert.value for alert in at.info)
+    assert '对照实验' not in at.radio(key='nav').options
+    assert not any(button.key=='run_mechanism' for button in at.button)
 
 
 def test_web_consultation_adopt_confirm_and_recompute():
@@ -86,15 +85,23 @@ def test_web_consultation_adopt_confirm_and_recompute():
     assert ctl.completed_runs==2
 
 
-def test_web_mechanism_experiment_is_explicit_and_not_repeated_on_render():
-    at=app()
-    at.radio(key='nav').set_value('对照实验').run()
-    at.button(key='run_mechanism').click().run()
-    assert not at.exception
-    record=at.session_state['mechanism_record'];stamp=record['completed_at_utc']
-    assert len(record['rows'])==180 and all(r['equal_to_full'] for r in record['rows'])
-    at.run()
-    assert at.session_state['mechanism_record']['completed_at_utc']==stamp
+def test_home_cover_links_to_workbench_without_running_a_task_and_recovers_old_nav():
+    at=AppTest.from_file(str(ROOT/'streamlit_app.py'),default_timeout=30).run()
+    native=at.get('html')
+    assert len(native)==1 and native[0].proto.unsafe_allow_javascript
+    visible=native[0].proto.body+' '.join(item.value for item in at.markdown)
+    assert 'app/static/engiagent-cover.png' in visible
+    assert '<h1 id="ea-hero-title">' in visible and 'data-ea-vector="1"' in visible
+    assert 'href="#engineering-workbench"' in visible and 'href="#about-engiagent"' in visible
+    assert 'id="engineering-workbench"' in visible and 'id="about-engiagent"' in visible
+    assert (ROOT/'static/engiagent-cover.png').is_file()
+    ctl=at.session_state['workbench']
+    assert ctl.result is None and ctl.completed_runs==0
+    old=AppTest.from_file(str(ROOT/'streamlit_app.py'),default_timeout=30)
+    old.session_state['nav']='对照实验'
+    old.run()
+    assert not old.exception and old.radio(key='nav').value=='设计工作台'
+    assert old.session_state['workbench'].completed_runs==0
 
 
 def test_missing_parameters_are_located_in_their_group_and_cannot_confirm():

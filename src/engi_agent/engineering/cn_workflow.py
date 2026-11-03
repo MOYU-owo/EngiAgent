@@ -285,7 +285,26 @@ def run_engineering(state, roles, on_event=None):
             s.search_stop_reason = '已达到确认的改设轮次上限；仅在已授权候选范围内搜索。'
             if not passed: s.errors.append('已达到确认的改设轮次上限，未获得通过方案')
             return END
-        proposal = search.propose(s, context['parameters'], context['minimum_bar_count'])
+        if getattr(roles,'supports_candidate_planning',False):
+            from .candidate_planner import propose
+            emit_progress(s,on_event,ProgressEvent(phase='design',kind='planning',name='DesignDecision',status='running'))
+            try:
+                proposal=propose(search,s,context['parameters'],context['minimum_bar_count'],roles,
+                                 s.revisions[start_revision:],s.request.max_iterations-context['iteration'])
+            except Exception as exc:
+                s.search_stop_reason=f'Design Agent候选决策失败（{type(exc).__name__}），已停止；未执行被拒绝的修改。'
+                s.errors.append(s.search_stop_reason)
+                s.evaluation.status='error'
+                emit_progress(s,on_event,ProgressEvent(phase='design',kind='planning',name='DesignDecision',status='failed'))
+                return END
+            emit_progress(s,on_event,ProgressEvent(phase='design',kind='planning',name='DesignDecision',status='success',
+                          outputs=search.selection_trace[-1]))
+            if proposal is None:
+                s.search_stop_reason='Design Agent决定停止：'+search.selection_trace[-1]['decision']['reason']
+                if not passed:s.errors.append('尚未获得通过方案；'+s.search_stop_reason)
+                return END
+        else:
+            proposal = search.propose(s, context['parameters'], context['minimum_bar_count'])
         if proposal is None:
             s.search_stop_reason = '已无可用的有限改设候选；固定尺寸、尺寸上限及构造条件不自动放宽。尚未通过的构造条件需工程师调整。'
             if not passed:
@@ -316,6 +335,7 @@ def run_engineering(state, roles, on_event=None):
             final.design_search['preference_guidance']=final.request.preference_guidance
             final.design_search['preference_snapshot']=final.request.preference_snapshot.model_dump() if final.request.preference_guidance else None
             final.design_search['selection_trace']=search.selection_trace
+            final.design_search['decision_mode']='llm' if getattr(roles,'supports_candidate_planning',False) else 'rule'
             if final.design_alternatives:
                 chosen_id = final.design_alternatives[0]['revision']
                 chosen = next(r for r in attempts if r['revision'] == chosen_id)

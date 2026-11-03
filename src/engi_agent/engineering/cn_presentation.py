@@ -222,7 +222,7 @@ def progress_text(event: ProgressEvent) -> str:
 
 
 
-LABELS = {**TOOLS, **TARGETS}
+LABELS = {**TOOLS, **TARGETS, 'DesignDecision':'下一轮参数决策'}
 
 OUTPUTS = {
     'beam_width_mm':'梁宽/mm', 'beam_depth_mm':'梁高/mm', 'effective_depth_mm':'有效高度/mm',

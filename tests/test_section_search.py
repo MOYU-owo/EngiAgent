@@ -11,6 +11,7 @@ from engi_agent.engineering.cn_presentation import parameter_rows, confirmation_
 from engi_agent.engineering.design_search import shortlist
 from engi_agent.engineering.roles import ProgramRoles
 from engi_agent.ui.service import WorkbenchSession
+from engi_agent.ui.service import load_case
 
 make = runpy.run_path(str(Path(__file__).resolve().parents[1]/'examples/reproduce_report_feedback.py'))['report_request']
 
@@ -124,3 +125,33 @@ def test_nonrepairable_anchor_conditions_do_not_trigger_unbounded_bar_increases(
     assert s.evaluation.status == 'fail' and not s.design_alternatives
     assert len(s.revisions) < 40
     assert all(h['parameters']['end_anchor_length_mm'] == 200 for h in s.revisions)
+
+
+@pytest.mark.parametrize('case', ['完整新方案设计','截面与配筋联合设计'])
+def test_small_initial_diameter_can_recover_using_authorized_catalogue(case):
+    r=load_case(case);setp(r,'bar_diameter_mm',14)
+    r.search_diameters_mm=[20,22,25]
+    s=run(r)
+    first=s.revisions[0]
+    assert first['candidate']['bar_count']>=5
+    assert first['evaluation']['checks']['detailing'] is False
+    assert any('锚固范围横向钢筋间距' in reason for reason in
+               first['tools']['evaluation.detailing_check']['outputs']['reasons'])
+    assert s.evaluation.status=='pass' and all(s.evaluation.checks.values())
+    assert any(h['parameters']['bar_diameter_mm'] in r.search_diameters_mm for h in s.revisions[1:])
+    assert all(h['parameters']['bar_diameter_mm'] in [14,*r.search_diameters_mm] for h in s.revisions)
+    assert all(h['parameters']['end_anchor_stirrup_spacing_mm']==100 for h in s.revisions)
+    assert len(s.revisions)<=r.max_iterations
+    for key in ('beam_width_mm','beam_depth_mm'):
+        if key in r.parameters:
+            assert all(h['parameters'][key]==float(r.parameters[key].value) for h in s.revisions)
+
+
+def test_diameter_recovery_does_not_invent_permission_or_change_anchor_spacing():
+    r=load_case('完整新方案设计');setp(r,'bar_diameter_mm',14)
+    r.search_diameters_mm=[]
+    s=run(r)
+    assert s.evaluation.status=='fail'
+    assert len(s.revisions)==1
+    assert s.revisions[0]['parameters']['bar_diameter_mm']==14
+    assert s.revisions[0]['parameters']['end_anchor_stirrup_spacing_mm']==100

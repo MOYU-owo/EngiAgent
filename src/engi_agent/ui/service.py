@@ -12,7 +12,7 @@ from engi_agent.engineering.cn_schema import EngineeringState, TaskRequest, Para
 from engi_agent.engineering.cn_workflow import prepare, confirm, run_engineering
 from engi_agent.engineering.cn_workflow import revise, ALL_TARGETS
 from engi_agent.engineering.cn_schema import CN_UNITS
-from engi_agent.engineering.roles import FixtureRoles, DeepSeekRoles, RolePlan, ProgramRoles
+from engi_agent.engineering.roles import FixtureRoles, DeepSeekRoles, RolePlan, ProgramRoles, CandidateDecision
 from engi_agent.engineering.cn_presentation import markdown_report
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -73,6 +73,14 @@ class RecordingRoles:
 
     def plan(self, role, payload):
         return self._invoke(role, payload, lambda: RolePlan.model_validate(self.inner.plan(role, payload)))
+
+    @property
+    def supports_candidate_planning(self):
+        return getattr(self.inner,'supports_candidate_planning',False)
+
+    def choose_candidate(self,payload):
+        return self._invoke('DesignDecision',payload,
+            lambda:CandidateDecision.model_validate(self.inner.choose_candidate(payload)))
 
 
 @dataclass

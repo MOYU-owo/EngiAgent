@@ -15,12 +15,22 @@ class RolePlan(Contract):
     explanation: str = Field(description="仅解释工具顺序，不生成数值或合规结论")
 
 
+class CandidateDecision(Contract):
+    stop: bool = False
+    beam_width_mm: float | None = Field(default=None, gt=0)
+    beam_depth_mm: float | None = Field(default=None, gt=0)
+    bar_diameter_mm: float | None = Field(default=None, gt=0)
+    minimum_bar_count: int = Field(default=2, ge=2, le=200, strict=True)
+    reason: str = Field(min_length=1, max_length=2000)
+
+
 class RoleClient(Protocol):
     def parse(self, query: str) -> TaskRequest: ...
     def plan(self, role: Literal["Design", "Evaluation"], payload: dict) -> RolePlan: ...
 
 
 class DeepSeekRoles:
+    supports_candidate_planning = True
     def __init__(self, model=None):
         if model is None:
             from engi_agent.config import Settings
@@ -78,6 +88,23 @@ class DeepSeekRoles:
                           "explanation只解释职责和工具衔接，不计算数值、不判断合规；所有数据以Python工具为准。"),
             HumanMessage(content=json.dumps(payload, ensure_ascii=False))])
         return RolePlan.model_validate(response)
+
+    def choose_candidate(self, payload: dict) -> CandidateDecision:
+        response = self.model.with_structured_output(CandidateDecision, method='function_calling').invoke([
+            SystemMessage(content=(
+                '你是Design Agent，负责根据真实验算反馈自主决定下一轮截面与配筋探索方向。'
+                '你可以调整允许变化的梁宽、梁高、纵筋直径及最少根数，或说明停止原因。'
+                '不必遵循固定的加高/加筋顺序；结合失败的具体原因、历史结果、剩余预算和工程师偏好作出取舍。'
+                '固定尺寸不得改变；自由尺寸只能取domain内以initial_mm为起点的step_mm离散值。'
+                '纵筋直径只能从allowed_diameters中选择；未填的尺寸/直径保持当前值。'
+                'minimum_bar_count是交给设计工具的最少根数，实际根数仍由工具计算，不等于最终配筋。'
+                '不得重复tried中的参数与最少根数组合，不得修改荷载、材料、限值或其他已确认构造输入。'
+                'preference若非空，其非负权重依次对应梁高/1000、受拉纵筋面积/1000、控制利用率，成本越低越好；'
+                '它只是取舍倾向，不得用来放宽验算要求。未验算方案的利用率未知，不得编造。'
+                'reason用简洁中文说明：问题在哪里、为什么改这些参数、预计权衡是什么；不能保证未验算方案通过。'
+                '若已有方案通过，可继续寻找有不同取舍的方案；确无值得尝试的合法修改时stop=true并说明。')),
+            HumanMessage(content=json.dumps(payload,ensure_ascii=False))])
+        return CandidateDecision.model_validate(response)
 
 
 class ProgramRoles:
