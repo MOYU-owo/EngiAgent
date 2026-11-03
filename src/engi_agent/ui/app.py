@@ -70,7 +70,7 @@ def header(ctl):
 
 def sidebar(ctl):
     with st.sidebar:
-        st.markdown('<div class="brand">EngiAgent<span style="color:#8da7c5">.</span></div><div class="eyebrow">RC BEAM WORKBENCH</div>',unsafe_allow_html=True)
+        st.markdown('<div class="brand">EngiAgent<span class="brand-dot">.</span></div><div class="eyebrow">RC BEAM WORKBENCH</div>',unsafe_allow_html=True)
         st.write('')
         st.radio('工作区',PAGES,key='nav',label_visibility='collapsed')
         st.divider()
